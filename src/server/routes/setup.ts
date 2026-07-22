@@ -5,8 +5,8 @@ import QRCode from "qrcode";
 import { eq } from "drizzle-orm";
 import { appState, ownerConfig, recoveryCodes } from "../schema.js";
 import { constantTimeEqual, encryptSmallSecret, randomToken, sha256, sourceIpHash } from "../security/primitives.js";
-import { generateTotp, verifyTotp } from "../security/totp.js";
-import { consumeRateLimit } from "../security/rate-limit.js";
+import { generateTotp, verifyTotp, type TotpDigits } from "../security/totp.js";
+import { checkRateLimit, consumeRateLimit, recordRateLimitFailure, resetRateLimit, type RatePolicy } from "../security/rate-limit.js";
 import { createOwnerSession } from "../security/sessions.js";
 import { writeAudit } from "../security/audit.js";
 import { errorSchema, sendError } from "../http.js";
@@ -14,6 +14,7 @@ import { errorSchema, sendError } from "../http.js";
 interface SetupState {
   secret: string;
   uri: string;
+  digits: TotpDigits;
   firstStep?: number;
   verifiedStep?: number;
   recoveryCodes?: string[];
@@ -62,13 +63,16 @@ async function fixedDelay(started: number): Promise<void> {
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/setup/status", {
-    schema: { tags: ["Setup"], response: { 200: { type: "object", required: ["setupRequired", "recoveryAuthorized"], properties: { setupRequired: { type: "boolean" }, recoveryAuthorized: { type: "boolean" } } } } },
-  }, async (request) => ({ setupRequired: !setupComplete(app), recoveryAuthorized: recoveryAuthorization(app, request.cookies[recoverySetupCookie(app)]) }));
+    schema: { tags: ["Setup"], response: { 200: { type: "object", required: ["setupRequired", "recoveryAuthorized", "totpDigits"], properties: { setupRequired: { type: "boolean" }, recoveryAuthorized: { type: "boolean" }, totpDigits: { type: "integer", enum: [6, 10] } } } } },
+  }, async (request) => {
+    const owner = app.database.orm.select({ totpDigits: ownerConfig.totpDigits }).from(ownerConfig).get();
+    return { setupRequired: !owner, recoveryAuthorized: recoveryAuthorization(app, request.cookies[recoverySetupCookie(app)]), totpDigits: owner?.totpDigits === 6 ? 6 : 10 };
+  });
 
-  app.post<{ Body: { setupSecret: string } }>("/api/setup/unlock", {
+  app.post<{ Body: { setupSecret: string; digits?: TotpDigits } }>("/api/setup/unlock", {
     schema: {
-      tags: ["Setup"], body: { type: "object", additionalProperties: false, required: ["setupSecret"], properties: { setupSecret: { type: "string", maxLength: 4096 } } },
-      response: { 200: { type: "object", required: ["secret", "uri", "qrDataUrl"], properties: { secret: { type: "string" }, uri: { type: "string" }, qrDataUrl: { type: "string" } } }, 400: errorSchema, 409: errorSchema, 429: errorSchema },
+      tags: ["Setup"], body: { type: "object", additionalProperties: false, required: ["setupSecret"], properties: { setupSecret: { type: "string", maxLength: 4096 }, digits: { type: "integer", enum: [6, 10], default: 10 } } },
+      response: { 200: { type: "object", required: ["secret", "uri", "qrDataUrl", "digits"], properties: { secret: { type: "string" }, uri: { type: "string" }, qrDataUrl: { type: "string" }, digits: { type: "integer", enum: [6, 10] } } }, 400: errorSchema, 409: errorSchema, 429: errorSchema },
     },
   }, async (request, reply) => {
     if (setupComplete(app)) return sendError(reply, 409, "setup_closed", "Setup has already been completed.");
@@ -90,31 +94,48 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, "setup_failed", "Setup could not be unlocked.");
     }
     const label = new URL(app.appConfig.appBaseUrl).hostname;
-    const material = generateTotp(label);
+    const digits: TotpDigits = request.body.digits === 6 ? 6 : 10;
+    const material = generateTotp(label, digits);
     const token = randomToken(32);
-    setupStates.set(token, { ...material, expiresAt: Date.now() + 20 * 60_000 });
+    setupStates.set(token, { ...material, digits, expiresAt: Date.now() + 20 * 60_000 });
     reply.setCookie(setupCookie(app), token, { path: "/", httpOnly: true, secure: app.appConfig.secureCookies, sameSite: "strict", maxAge: 20 * 60 });
     await fixedDelay(started);
-    return { ...material, qrDataUrl: await QRCode.toDataURL(material.uri, { errorCorrectionLevel: "M", margin: 1, width: 280 }) };
+    return { ...material, digits, qrDataUrl: await QRCode.toDataURL(material.uri, { errorCorrectionLevel: "M", margin: 1, width: 280 }) };
   });
 
   app.post<{ Body: { code: string } }>("/api/setup/verify-totp", {
     schema: {
-      tags: ["Setup"], body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^[0-9]{10}$" } } },
-      response: { 200: { type: "object", required: ["verified", "needsNextWindow"], properties: { verified: { type: "boolean" }, needsNextWindow: { type: "boolean" }, recoveryCodes: { type: "array", items: { type: "string" } } } }, 400: errorSchema, 401: errorSchema },
+      tags: ["Setup"], body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^(?:[0-9]{6}|[0-9]{10})$" } } },
+      response: { 200: { type: "object", required: ["verified", "needsNextWindow"], properties: { verified: { type: "boolean" }, needsNextWindow: { type: "boolean" }, recoveryCodes: { type: "array", items: { type: "string" } } } }, 400: errorSchema, 401: errorSchema, 429: errorSchema },
     },
   }, async (request, reply) => {
     if (setupComplete(app)) return sendError(reply, 400, "setup_closed", "Setup has already been completed.");
-    const state = stateFor(app, request.cookies[setupCookie(app)]);
+    const token = request.cookies[setupCookie(app)];
+    const state = stateFor(app, token);
     if (!state) return sendError(reply, 401, "setup_session_expired", "Unlock setup again to continue.");
-    const step = verifyTotp(state.secret, request.body.code);
-    if (step === null) return sendError(reply, 400, "invalid_code", "The 10-digit code is not valid.");
+    const source = sourceIpHash(app.appConfig, request.ip);
+    const sessionPolicy: RatePolicy = { bucket: "setup-totp-session", key: token!, limit: 3, windowMs: 5 * 60_000, escalationSeconds: [30, 60, 300, 900] };
+    const ipPolicy: RatePolicy = { bucket: "setup-totp-ip", key: source, limit: 3, windowMs: 5 * 60_000, escalationSeconds: [30, 60, 300, 900] };
+    const sessionDecision = checkRateLimit(app.database, app.appConfig, sessionPolicy);
+    const ipDecision = checkRateLimit(app.database, app.appConfig, ipPolicy);
+    if (!sessionDecision.allowed || !ipDecision.allowed) {
+      reply.header("Retry-After", Math.max(sessionDecision.retryAfterSeconds, ipDecision.retryAfterSeconds));
+      return sendError(reply, 429, "verification_locked", "Too many incorrect codes. Verification is temporarily locked.");
+    }
+    const step = verifyTotp(state.secret, request.body.code, Date.now(), state.digits);
+    if (step === null) {
+      recordRateLimitFailure(app.database, app.appConfig, sessionPolicy);
+      recordRateLimitFailure(app.database, app.appConfig, ipPolicy);
+      return sendError(reply, 400, "invalid_code", `The ${state.digits}-digit code is not valid.`);
+    }
+    resetRateLimit(app.database, app.appConfig, sessionPolicy.bucket, sessionPolicy.key);
+    resetRateLimit(app.database, app.appConfig, ipPolicy.bucket, ipPolicy.key);
     if (state.firstStep === undefined) {
       state.firstStep = step;
       return { verified: false, needsNextWindow: true };
     }
     if (step === state.firstStep) return sendError(reply, 400, "same_time_window", "Wait for the next 30-second code and try again.");
-    if (step < state.firstStep) return sendError(reply, 400, "invalid_code", "The 10-digit code is not valid.");
+    if (step < state.firstStep) return sendError(reply, 400, "invalid_code", `The ${state.digits}-digit code is not valid.`);
     state.verifiedStep = step;
     if (!state.recoveryCodes) {
       state.recoveryCodes = Array.from({ length: 10 }, () => randomToken(16));
@@ -137,6 +158,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
     app.database.sqlite.transaction(() => {
       app.database.orm.insert(ownerConfig).values({
         singletonId: 1, encryptedTotpSecret: encryptSmallSecret(app.appConfig, state.secret), lastAcceptedTotpStep: state.verifiedStep ?? state.firstStep,
+        totpDigits: state.digits, totpPeriodSeconds: 30, totpAlgorithm: "SHA1",
         setupCompletedAt: now, createdAt: now, updatedAt: now,
       }).run();
       state.recoveryHashes!.forEach((hash) => app.database.orm.insert(recoveryCodes).values({ id: randomUUID(), argon2idHash: hash, usedAt: null, createdAt: now }).run());

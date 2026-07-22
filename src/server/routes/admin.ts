@@ -43,10 +43,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/admin/logs", { preHandler: requireOwner, schema: { tags: ["Admin"], response: { 200: { type: "object", required: ["events"], properties: { events: { type: "array", items: { type: "object", additionalProperties: true } } } }, 401: errorSchema } } }, async () => ({ events: listAudit(app.database, 250) }));
 
-  app.post<{ Body: { code: string } }>("/api/security/recovery-codes/regenerate", { preHandler: requireOwnerCsrf, schema: { tags: ["Security"], body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^[0-9]{10}$" } } }, response: { 200: { type: "object", required: ["recoveryCodes"], properties: { recoveryCodes: { type: "array", items: { type: "string" } } } }, 400: errorSchema, 401: errorSchema, 403: errorSchema } } }, async (request, reply) => {
+  app.post<{ Body: { code: string } }>("/api/security/recovery-codes/regenerate", { preHandler: requireOwnerCsrf, schema: { tags: ["Security"], body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^(?:[0-9]{6}|[0-9]{10})$" } } }, response: { 200: { type: "object", required: ["recoveryCodes"], properties: { recoveryCodes: { type: "array", items: { type: "string" } } } }, 400: errorSchema, 401: errorSchema, 403: errorSchema } } }, async (request, reply) => {
     const owner = app.database.orm.select().from(ownerConfig).get();
     if (!owner) return sendError(reply, 400, "setup_required", "Setup is required.");
-    const step = verifyTotp(decryptSmallSecret(app.appConfig, owner.encryptedTotpSecret), request.body.code);
+    const step = verifyTotp(decryptSmallSecret(app.appConfig, owner.encryptedTotpSecret), request.body.code, Date.now(), owner.totpDigits === 6 ? 6 : 10);
     if (step === null || (owner.lastAcceptedTotpStep !== null && step <= owner.lastAcceptedTotpStep)) return sendError(reply, 400, "invalid_code", "The code could not be accepted.");
     const { randomToken } = await import("../security/primitives.js");
     const { randomUUID } = await import("node:crypto");
