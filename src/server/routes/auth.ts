@@ -4,12 +4,14 @@ import type { FastifyInstance } from "fastify";
 import { appState, ownerConfig, recoveryCodes, sessions } from "../schema.js";
 import { decryptSmallSecret, randomToken, sha256, sourceIpHash } from "../security/primitives.js";
 import { verifyTotp } from "../security/totp.js";
-import { consumeRateLimit, resetRateLimit } from "../security/rate-limit.js";
+import { checkRateLimit, consumeRateLimit, recordRateLimitFailure, resetRateLimit, type RatePolicy } from "../security/rate-limit.js";
 import { clearOwnerCookie, createOwnerSession, requireOwner, requireOwnerCsrf, revokeAllSessions } from "../security/sessions.js";
 import { writeAudit } from "../security/audit.js";
 import { errorSchema, sendError } from "../http.js";
 
 const genericLoginMessage = "The code could not be accepted. Check it and try again.";
+const lockedLoginMessage = "Too many incorrect codes. Sign-in is temporarily locked.";
+const loginEscalation = [30, 60, 300, 900, 3600] as const;
 
 async function minimumResponseTime(started: number): Promise<void> {
   const wait = 350 - (Date.now() - started);
@@ -24,23 +26,25 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: { code: string } }>("/api/auth/totp/login", {
-    schema: { tags: ["Authentication"], body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^[0-9]{10}$" } } }, response: { 200: { type: "object", required: ["authenticated", "csrfToken"], properties: { authenticated: { type: "boolean" }, csrfToken: { type: "string" } } }, 401: errorSchema, 429: errorSchema } },
+    schema: { tags: ["Authentication"], body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^(?:[0-9]{6}|[0-9]{10})$" } } }, response: { 200: { type: "object", required: ["authenticated", "csrfToken"], properties: { authenticated: { type: "boolean" }, csrfToken: { type: "string" } } }, 401: errorSchema, 429: errorSchema } },
   }, async (request, reply) => {
     const started = Date.now();
     const ipHash = sourceIpHash(app.appConfig, request.ip);
-    const schedule = [30, 60, 300, 900, 3600] as const;
-    const ipDecision = consumeRateLimit(app.database, app.appConfig, { bucket: "owner-login-ip", key: ipHash, limit: 5, windowMs: 5 * 60_000, escalationSeconds: schedule });
-    const globalDecision = consumeRateLimit(app.database, app.appConfig, { bucket: "owner-login-global", key: "global", limit: 100, windowMs: 10 * 60_000, escalationSeconds: [600] });
+    const ipPolicy: RatePolicy = { bucket: "owner-login-ip", key: ipHash, limit: 3, windowMs: 5 * 60_000, escalationSeconds: loginEscalation };
+    const ownerPolicy: RatePolicy = { bucket: "owner-login-owner", key: "owner", limit: 3, windowMs: 5 * 60_000, escalationSeconds: loginEscalation };
+    const ipDecision = checkRateLimit(app.database, app.appConfig, ipPolicy);
+    const globalDecision = checkRateLimit(app.database, app.appConfig, ownerPolicy);
     if (!ipDecision.allowed || !globalDecision.allowed) {
       const retry = Math.max(ipDecision.retryAfterSeconds, globalDecision.retryAfterSeconds);
       reply.header("Retry-After", retry);
       await minimumResponseTime(started);
-      return sendError(reply, 429, "try_again_later", genericLoginMessage);
+      writeAudit(app.database, "owner_login_rate_limited", { severity: "warn", actorType: "anonymous", sourceIpHash: ipHash });
+      return sendError(reply, 429, "login_locked", lockedLoginMessage);
     }
     const owner = app.database.orm.select().from(ownerConfig).get();
     let accepted = false;
     if (owner && !owner.recoveryRequiredAt) {
-      const step = verifyTotp(decryptSmallSecret(app.appConfig, owner.encryptedTotpSecret), request.body.code);
+      const step = verifyTotp(decryptSmallSecret(app.appConfig, owner.encryptedTotpSecret), request.body.code, Date.now(), owner.totpDigits === 6 ? 6 : 10);
       if (step !== null && (owner.lastAcceptedTotpStep === null || step > owner.lastAcceptedTotpStep)) {
         const result = app.database.sqlite.prepare("UPDATE owner_config SET last_accepted_totp_step = ?, updated_at = ? WHERE singleton_id = 1 AND (last_accepted_totp_step IS NULL OR last_accepted_totp_step < ?)").run(step, Date.now(), step);
         accepted = result.changes === 1;
@@ -48,10 +52,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
     await minimumResponseTime(started);
     if (!accepted) {
+      recordRateLimitFailure(app.database, app.appConfig, ipPolicy);
+      recordRateLimitFailure(app.database, app.appConfig, ownerPolicy);
       writeAudit(app.database, "owner_login_failed", { severity: "warn", actorType: "anonymous", sourceIpHash: ipHash });
       return sendError(reply, 401, "invalid_login", genericLoginMessage);
     }
     resetRateLimit(app.database, app.appConfig, "owner-login-ip", ipHash);
+    resetRateLimit(app.database, app.appConfig, "owner-login-owner", "owner");
     writeAudit(app.database, "owner_login_success", { actorType: "owner", sourceIpHash: ipHash });
     const result = createOwnerSession(app.database, app.appConfig, request, reply);
     const csrfCookie = app.appConfig.secureCookies ? "__Host-dropiku_csrf_hint" : "dropiku_csrf_hint";

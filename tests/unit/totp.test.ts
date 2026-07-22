@@ -28,3 +28,15 @@ describe("10-digit TOTP", () => {
     expect(verifyTotp(secret, "00000abcde")).toBeNull();
   });
 });
+
+describe("6-digit TOTP compatibility", () => {
+  it("generates a standard URI and accepts only six digits", () => {
+    const { secret, uri } = generateTotp("compatibility", 6);
+    const timestamp = 1_700_000_000_000;
+    const token = generateTotpCode(secret, timestamp, 6);
+    expect(uri).toContain("digits=6");
+    expect(token).toMatch(/^\d{6}$/u);
+    expect(verifyTotp(secret, token, timestamp, 6)).toBe(totpStep(timestamp));
+    expect(verifyTotp(secret, `${token}0000`, timestamp, 6)).toBeNull();
+  });
+});

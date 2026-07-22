@@ -33,6 +33,11 @@ select { appearance: auto; }
 .tiny-break { margin-top: var(--space-2); color: var(--color-on-surface-muted); font-family: var(--font-mono); font-size: 11px; word-break: break-all; }
 .calm-notice { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: center; padding: var(--space-4); }
 .calm-notice svg { color: var(--color-primary); }
+.totp-choice { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); border: 0; padding: 0; margin: 0; }
+.totp-choice legend { grid-column: 1 / -1; margin-bottom: var(--space-2); }
+.totp-choice button { display: grid; gap: 3px; min-width: 0; padding: var(--space-3); color: var(--color-on-surface); text-align: left; background: var(--color-surface-soft); border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; }
+.totp-choice button small { color: var(--color-on-surface-muted); line-height: 1.35; }
+.totp-choice button.is-selected { color: var(--color-primary); background: var(--color-primary-soft); border-color: color-mix(in srgb, var(--color-primary) 52%, transparent); }
 .recovery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 .recovery-grid code { padding: var(--space-2); border-radius: var(--radius-sm); background: var(--color-surface-soft); text-align: center; font-size: 11px; user-select: all; overflow-wrap: anywhere; }
 .check-row { min-height: 44px; display: flex; align-items: center; gap: var(--space-3); }

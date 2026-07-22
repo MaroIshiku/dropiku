@@ -6,7 +6,7 @@ Private File Exchange
 
 ## Summary
 
-Dropiku is a single-owner web app for moving files between devices without maintaining a conventional password. The owner signs in with a 10-digit, 30-second TOTP code. Files can expire automatically or remain pinned, and public access is granted through long cryptographic capability links whose secret stays in the URL fragment.
+Dropiku is a single-owner web app for moving files between devices without maintaining a conventional password. The owner signs in with a 30-second TOTP code, using either the recommended 10-digit format or the standard 6-digit compatibility format. Files can expire automatically or remain pinned, and public access is granted through long cryptographic capability links whose secret stays in the URL fragment.
 
 Dropiku is designed for Docker deployments behind an HTTPS reverse proxy. It stores metadata in SQLite and file bodies on the local filesystem; uploads and downloads are streamed instead of being buffered completely in memory.
 
@@ -25,7 +25,8 @@ The supplied Dropiku icon is used as the application identity without creating a
 ## Features
 
 - Single-owner first-run setup protected by a server-side setup secret.
-- Passwordless owner login using 10-digit RFC 6238 TOTP with replay protection.
+- Passwordless owner login using 6- or 10-digit RFC 6238 TOTP with replay protection.
+- Persistent per-IP and owner-wide TOTP lockouts after three incorrect codes, beginning at 30 seconds and escalating on repeated failures.
 - Ten one-time recovery codes stored only as Argon2id hashes.
 - Opaque, server-side sessions with idle and absolute expiry, strict cookies, and CSRF protection.
 - Streamed multi-file uploads, streamed downloads, SHA-256 checksums, and server-enforced limits.
@@ -95,9 +96,9 @@ The container listens on port `8080`. Expose it publicly only through an HTTPS r
 
 ### First launch
 
-Opening Dropiku for the first time redirects to `/setup`. Enter the configured `APP_SETUP_SECRET` value (or the content of `secrets/setup_secret.txt` in the standard Docker setup), then scan the TOTP QR code. Setup requires two correct 10-digit codes from separate 30-second windows before it can finish.
+Opening Dropiku for the first time redirects to `/setup`. Enter the configured `APP_SETUP_SECRET` value (or the content of `secrets/setup_secret.txt` in the standard Docker setup), choose the recommended 10-digit TOTP format or the standard 6-digit compatibility format, then scan the QR code. Setup requires two correct codes from separate 30-second windows before it can finish.
 
-The `digits=10` parameter is not honored by every authenticator. Bitwarden Authenticator is a known compatible choice. Six-digit codes cannot be used with Dropiku.
+The `digits=10` parameter is not honored by every authenticator. Bitwarden Authenticator is a known compatible choice; select the 6-digit format when broader authenticator compatibility is required.
 
 ### Create the owner access
 

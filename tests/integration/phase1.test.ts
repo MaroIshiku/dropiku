@@ -11,7 +11,7 @@ describe("phase-one workflow", () => {
   it("sets up the owner, streams files, and enforces capability scopes", async () => {
     const fixture = await testApp(); cleanup = fixture.close;
     const status = await fixture.app.inject({ method: "GET", url: "/api/setup/status" });
-    expect(status.json()).toEqual({ setupRequired: true, recoveryAuthorized: false });
+    expect(status.json()).toEqual({ setupRequired: true, recoveryAuthorized: false, totpDigits: 10 });
 
     const unlock = await fixture.app.inject({ method: "POST", url: "/api/setup/unlock", payload: { setupSecret: fixture.config.setupSecret } });
     expect(unlock.statusCode).toBe(200);
@@ -71,6 +71,36 @@ describe("phase-one workflow", () => {
     expect(complete.statusCode).toBe(200);
     const ownerFiles = await fixture.app.inject({ method: "GET", url: "/api/files?filter=uploaded_by_request", headers: { cookie: ownerCookie } });
     expect(ownerFiles.json().files).toHaveLength(1);
+  });
+
+  it("supports standard six-digit TOTP and locks the IP and owner after three failures", async () => {
+    const fixture = await testApp(); cleanup = fixture.close;
+    const unlock = await fixture.app.inject({ method: "POST", url: "/api/setup/unlock", payload: { setupSecret: fixture.config.setupSecret, digits: 6 } });
+    expect(unlock.statusCode).toBe(200);
+    expect(unlock.json<{ uri: string; digits: number }>().digits).toBe(6);
+    expect(unlock.json<{ uri: string }>().uri).toContain("digits=6");
+    const setupCookie = cookieHeader(unlock);
+    const secret = unlock.json<{ secret: string }>().secret;
+    const now = Date.now();
+    const first = await fixture.app.inject({ method: "POST", url: "/api/setup/verify-totp", headers: { cookie: setupCookie }, payload: { code: generateTotpCode(secret, now - 30_000, 6) } });
+    expect(first.statusCode).toBe(200);
+    const second = await fixture.app.inject({ method: "POST", url: "/api/setup/verify-totp", headers: { cookie: setupCookie }, payload: { code: generateTotpCode(secret, now, 6) } });
+    expect(second.statusCode).toBe(200);
+    const finish = await fixture.app.inject({ method: "POST", url: "/api/setup/finish", headers: { cookie: setupCookie }, payload: { recoveryCodesSaved: true } });
+    expect(finish.statusCode).toBe(200);
+    const status = await fixture.app.inject({ method: "GET", url: "/api/setup/status" });
+    expect(status.json().totpDigits).toBe(6);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const failed = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "203.0.113.7", payload: { code: "000000" } });
+      expect(failed.statusCode).toBe(401);
+    }
+    const locked = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "203.0.113.7", payload: { code: generateTotpCode(secret, now + 30_000, 6) } });
+    expect(locked.statusCode).toBe(429);
+    expect(Number(locked.headers["retry-after"])).toBeGreaterThan(0);
+    expect(Number(locked.headers["retry-after"])).toBeLessThanOrEqual(30);
+    const ownerWideLock = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "198.51.100.9", payload: { code: generateTotpCode(secret, now + 30_000, 6) } });
+    expect(ownerWideLock.statusCode).toBe(429);
   });
 
   it("rejects traversal names and oversized streamed uploads before committing", async () => {

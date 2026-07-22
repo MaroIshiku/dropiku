@@ -13,7 +13,7 @@ const eventLabels: Record<string, string> = {
   file_pinned: "File pinned", file_deleted: "File deleted", recovery_codes_regenerated: "Recovery codes regenerated",
 };
 
-function iconFor(type: string): IconName { if (type.includes("upload") || type.includes("submission")) return "upload"; if (type.includes("download")) return "download"; if (type.includes("share") || type.includes("link")) return "share"; if (type.includes("login") || type.includes("setup")) return "lock"; if (type.includes("delete") || type.includes("revoked")) return "trash"; return "history"; }
+function iconFor(type: string): IconName { if (type.includes("upload") || type.includes("submission")) return "upload"; if (type.includes("download")) return "download"; if (type.includes("share") || type.includes("link")) return "link"; if (type.includes("login") || type.includes("setup")) return "lock"; if (type.includes("delete") || type.includes("revoked")) return "trash"; return "history"; }
 
 export function ActivityView() {
   const [events, setEvents] = useState<ActivityEvent[]>([]); const toast = useToast();
