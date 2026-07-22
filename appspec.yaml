@@ -1,0 +1,1371 @@
+app_spec:
+  schema_version: "1.0.0"
+  document_status: "implementation_ready"
+  language: "de-DE"
+
+  identity:
+    app_id: "dropiku"
+    working_name: "Dropiku"
+    naming_status: "provisional"
+    category: "self_hosted_private_file_exchange"
+    symbol: "cloud_upload"
+    short_description: "Privater, TOTP-geschützter Dateiaustausch mit zeitlich begrenzten Download- und Upload-Freigaben."
+    suite: "Pixel Soft Utility"
+
+  product_intent:
+    primary_goal: >-
+      Eine einzelne Person soll auf beliebigen Geräten ohne dauerhaftes Passwort schnell Dateien
+      hochladen, verwalten und wieder herunterladen können. Der Zugriff auf den privaten Bereich
+      erfolgt über einen 30-Sekunden-TOTP-Code. Dateien und Upload-Anfragen können zusätzlich über
+      lange, kryptografisch zufällige Capability-Links geteilt werden.
+    target_user:
+      count: 1
+      role: "owner_admin"
+      account_model: "single_user"
+    core_use_cases:
+      - "Auf einem fremden oder neuen Gerät per TOTP anmelden und Dateien hochladen."
+      - "Auf einem anderen Gerät per TOTP anmelden und die Dateien herunterladen."
+      - "Eine Datei über einen nicht erratbaren Download-Link freigeben."
+      - "Einen reinen Upload-Link erstellen, über den andere Dateien abgeben, aber nichts sehen oder herunterladen können."
+      - "Temporäre Dateien automatisch löschen lassen."
+      - "Wichtige Dateien anpinnen und dadurch von der automatischen Dateilöschung ausnehmen."
+    non_goals:
+      - "Kein Mehrbenutzer-Cloudspeicher."
+      - "Keine Ordnersynchronisation wie bei Nextcloud, Dropbox oder Syncthing."
+      - "Keine kollaborative Bearbeitung."
+      - "Keine öffentliche Dateisuche oder öffentliche Galerie."
+      - "Keine serverseitige Vorschau unbekannter Dateiformate im MVP."
+      - "Keine Ausführung, Entpackung oder Interpretation hochgeladener Dateien."
+
+  terminology:
+    owner_file: "Eine im privaten Bereich gespeicherte Datei."
+    download_share: "Zeitlich und optional mengenmäßig begrenzte Lesefreigabe für eine oder mehrere Dateien."
+    upload_request: "Schreibfreigabe, über die Dritte Dateien hochladen können, ohne Dateien aufzulisten oder herunterzuladen."
+    capability_link: "Ein Link, dessen kryptografisches Geheimnis selbst die Berechtigung darstellt."
+    pinned_file: "Datei ohne automatische Speicherablaufzeit; öffentliche Freigaben bleiben davon unabhängig begrenzt."
+    submission: "Ein abgeschlossener Upload-Vorgang über eine Upload-Anfrage, der eine oder mehrere Dateien enthalten kann."
+
+  implementation_stack:
+    required:
+      backend:
+        runtime: "Node.js LTS"
+        language: "TypeScript"
+        framework: "Fastify"
+        requirements:
+          - "Datei-Uploads und Downloads vollständig streamen; keine vollständigen Dateien in den RAM laden."
+          - "Strict TypeScript aktivieren."
+          - "OpenAPI-Schema aus Routen-Schemas erzeugen."
+      frontend:
+        framework: "React"
+        language: "TypeScript"
+        build_tool: "Vite"
+        requirements:
+          - "Mobile-first."
+          - "Keine externen CDN-Abhängigkeiten für Kernfunktion oder Icons."
+          - "PWA-Metadaten und installierbare Web-App, aber kein verpflichtender Offline-Dateizugriff."
+      database:
+        engine: "SQLite"
+        mode: "WAL"
+        orm: "Drizzle ORM oder gleichwertig typisiert"
+        location: "/data/database/dropiku.sqlite"
+      storage:
+        driver_mvp: "local_filesystem"
+        root: "/data/files"
+        temporary_root: "/data/tmp"
+        quarantine_root: "/data/quarantine"
+        future_driver: "s3_compatible_optional"
+      packaging:
+        type: "single Docker image"
+        architecture:
+          - "linux/amd64"
+          - "linux/arm64"
+        container_user: "non_root"
+        listen_port: 8080
+    prohibited:
+      - "Speicherung von Datei-Binärdaten direkt in SQLite."
+      - "Speicherung unter dem öffentlich auslieferbaren Web-Root."
+      - "Selbst entwickelte Kryptografie, wenn eine etablierte Bibliothek verfügbar ist."
+      - "Clientseitiges Vertrauen in Dateigröße, Dateityp, Ablaufdatum oder Berechtigungen."
+
+  deployment_model:
+    environment: "self_hosted_docker"
+    intended_hosts:
+      - "ZimaOS"
+      - "Docker Compose"
+      - "gewöhnliche Linux-Docker-Hosts"
+    network:
+      app_protocol: "HTTP innerhalb des vertrauenswürdigen Docker-Netzes"
+      public_protocol: "HTTPS zwingend über Reverse Proxy"
+      direct_public_http: false
+      trust_proxy_configurable: true
+    volumes:
+      - host_purpose: "persistente App-Daten"
+        container_path: "/data"
+        required: true
+    health_endpoints:
+      liveness: "/health/live"
+      readiness: "/health/ready"
+      authenticated_diagnostics: "/api/admin/diagnostics"
+
+  configuration:
+    secret_loading:
+      preferred: "Docker secrets oder gemountete Secret-Dateien"
+      support_file_suffix: true
+      file_suffix_pattern: "{VARIABLE}_FILE"
+    required_variables:
+      APP_BASE_URL:
+        description: "Öffentliche HTTPS-Basis-URL ohne abschließenden Slash."
+        example: "https://drop.example.invalid"
+      APP_SETUP_SECRET:
+        description: "Nur für die initiale Einrichtung; darf nach Abschluss nicht mehr als Web-Login dienen."
+        minimum_length: 32
+      APP_MASTER_KEY:
+        description: "32 zufällige Bytes, Base64-kodiert; verschlüsselt TOTP-Secret und andere kleine Geheimnisse."
+        format: "base64_32_bytes"
+      TZ:
+        default: "Europe/Berlin"
+    optional_variables:
+      TRUSTED_PROXIES:
+        default: "loopback,linklocal,uniquelocal"
+      DATA_DIR:
+        default: "/data"
+      MAX_STORAGE_BYTES:
+        default: 107374182400
+        human_default: "100 GiB"
+      DEFAULT_MAX_FILE_BYTES:
+        default: 5368709120
+        human_default: "5 GiB"
+      ABSOLUTE_MAX_FILE_BYTES:
+        default: 21474836480
+        human_default: "20 GiB"
+      MAX_CONCURRENT_UPLOADS:
+        default: 3
+      MAX_CONCURRENT_DOWNLOADS:
+        default: 6
+      CLAMAV_HOST:
+        default: null
+      CLAMAV_PORT:
+        default: 3310
+      APPRISE_API_URL:
+        default: null
+      APPRISE_CONFIG_KEY:
+        default: null
+      LOG_LEVEL:
+        default: "info"
+      ENABLE_TUS_UPLOADS:
+        default: false
+      ENABLE_AT_REST_FILE_ENCRYPTION:
+        default: false
+      ALLOW_LEGACY_TOKEN_IN_PATH_LINKS:
+        default: false
+
+  first_run_setup:
+    state_detection: "Keine owner-Konfiguration in der Datenbank vorhanden."
+    route: "/setup"
+    steps:
+      - id: "verify_setup_secret"
+        title: "Einrichtung freischalten"
+        fields:
+          - "APP_SETUP_SECRET"
+        behavior:
+          - "Konstantzeitvergleich verwenden."
+          - "Rate-Limit anwenden."
+          - "Nach erfolgreicher Gesamteinrichtung dauerhaft als verbraucht markieren."
+      - id: "generate_totp"
+        title: "TOTP einrichten"
+        behavior:
+          - "Kryptografisch zufälliges TOTP-Secret mit mindestens 160 Bit erzeugen."
+          - "QR-Code, lesbares Secret und vollständige otpauth-URI anzeigen."
+          - "Issuer und Account-Label aus App-Name und Hostname bilden."
+          - "Keine externen QR-Code-Dienste verwenden."
+      - id: "verify_totp_compatibility"
+        title: "Authenticator prüfen"
+        fields:
+          - "erster 10-stelliger TOTP-Code"
+          - "zweiter 10-stelliger TOTP-Code aus dem folgenden Zeitfenster"
+        behavior:
+          - "Einrichtung erst nach zwei gültigen Codes aus zwei unterschiedlichen Zeitschritten abschließen."
+          - "Bei sechsstelliger Eingabe erklären, dass der verwendete Generator die digits=10-Einstellung nicht anwendendet."
+          - "Hinweis auf Bitwarden Authenticator als kompatible Option anzeigen."
+      - id: "recovery_codes"
+        title: "Wiederherstellungscodes sichern"
+        behavior:
+          - "10 einmalig sichtbare Recovery-Codes erzeugen."
+          - "Jeder Code besitzt mindestens 128 Bit Zufallsentropie."
+          - "Nur Argon2id-Hashes speichern."
+          - "Download als TXT und Kopieren anbieten."
+          - "Explizite Bestätigung verlangen, dass die Codes gesichert wurden."
+      - id: "finish"
+        title: "Einrichtung abschließen"
+        behavior:
+          - "TOTP-Secret verschlüsselt persistieren."
+          - "Setup-Route sperren."
+          - "Erste Owner-Session erzeugen."
+    offline_recovery:
+      required: true
+      command: "dropiku admin reset-totp"
+      constraints:
+        - "Nur innerhalb des Containers oder über docker exec verfügbar."
+        - "Erfordert Zugriff auf APP_MASTER_KEY und das persistente Datenverzeichnis."
+        - "Widerruft alle Sessions, Recovery-Codes, öffentlichen Freigaben optional nach Bestätigung und das bisherige TOTP-Secret."
+
+  authentication:
+    model: "passwordless_single_factor_totp_for_owner"
+    security_notice: >-
+      TOTP wird hier bewusst als alleiniger Wissens-/Besitznachweis für einen privaten Einzelnutzer verwendet.
+      Es ist kein zweiter Faktor, weil kein zusätzliches Passwort existiert. Deshalb sind Rate-Limits,
+      Replay-Schutz, kurze Sessions, HTTPS und sichere Wiederherstellung zwingende Bestandteile.
+    totp:
+      standard: "RFC 6238"
+      digits: 10
+      period_seconds: 30
+      algorithm: "SHA1"
+      issuer: "Dropiku"
+      otpauth_parameters_required:
+        - "secret"
+        - "issuer"
+        - "algorithm=SHA1"
+        - "digits=10"
+        - "period=30"
+      verification_window:
+        past_steps: 1
+        current_step: true
+        future_steps: 1
+      replay_protection:
+        enabled: true
+        behavior: "Ein bereits erfolgreich verwendeter Zeitschritt darf nicht erneut für einen Login akzeptiert werden."
+      clock_requirements:
+        - "Serverzeit muss synchronisiert sein."
+        - "Diagnostik zeigt Zeitabweichungswarnung, falls ermittelbar."
+        - "Keine automatische dauerhafte Vergrößerung des Toleranzfensters."
+    login_ui:
+      route: "/login"
+      fields:
+        - type: "text"
+          inputmode: "numeric"
+          autocomplete: "one-time-code"
+          exact_length: 10
+          visual_grouping: "5-5"
+      behavior:
+        - "Führende Nullen erhalten."
+        - "Nur Ziffern annehmen."
+        - "Automatisches Absenden nach 10 Ziffern optional, aber bei reduzierter Bewegung deaktivierbar."
+        - "Keine Information ausgeben, ob Code, Zeitschritt oder Rate-Limit-Kriterium intern fehlgeschlagen ist."
+    sessions:
+      type: "opaque_server_side"
+      token_entropy_bits: 256
+      storage: "Nur Hash des Session-Tokens speichern."
+      cookie:
+        name: "__Host-dropiku_session"
+        secure: true
+        http_only: true
+        same_site: "Strict"
+        path: "/"
+      idle_timeout_minutes: 30
+      absolute_timeout_hours: 12
+      rotate_after_login: true
+      revoke_on_totp_reset: true
+      revoke_all_action: true
+    recovery_login:
+      route: "/login/recovery"
+      rate_limited: true
+      one_time_use: true
+      behavior:
+        - "Nach erfolgreicher Nutzung sofort TOTP-Neueinrichtung verlangen."
+        - "Alle bestehenden Sessions widerrufen."
+
+  rate_limiting:
+    storage: "SQLite-backed oder in-memory mit persistentem globalem Lockout-Status; Reverse-Proxy-Limit zusätzlich empfohlen."
+    response:
+      status_code: 429
+      include_retry_after: true
+      generic_error_messages: true
+    owner_login:
+      dimensions:
+        - "source_ip"
+        - "global"
+      source_ip_policy:
+        burst_attempts: 5
+        burst_window_minutes: 5
+        hourly_attempts: 20
+        lockout_schedule_seconds:
+          - 30
+          - 60
+          - 300
+          - 900
+          - 3600
+      global_policy:
+        attempts_per_10_minutes: 100
+        behavior: "Temporärer globaler Schutzmodus ohne Offenlegung interner Schwellenwerte."
+      success_behavior:
+        - "IP-spezifische Fehlversuchsserie zurücksetzen."
+        - "Sicherheitsereignis protokollieren, aber niemals TOTP-Code protokollieren."
+    setup_secret:
+      attempts_per_15_minutes_per_ip: 5
+      attempts_per_hour_global: 20
+    public_download:
+      per_ip_per_minute: 60
+      per_share_per_minute: 120
+      concurrent_per_ip: 4
+    public_upload:
+      request_initializations_per_ip_per_minute: 10
+      failed_token_resolutions_per_ip_per_15_minutes: 30
+      concurrent_per_ip: 2
+      concurrent_per_upload_request: 3
+      byte_rate_limit_configurable: true
+    metadata_api:
+      authenticated_requests_per_minute: 300
+
+  capability_link_design:
+    objective: "Freigabe-Geheimnisse sollen weder in Reverse-Proxy-Pfaden noch in Referer-Headern oder üblichen Access-Logs erscheinen."
+    default_format:
+      download: "{APP_BASE_URL}/s/{public_id}#{secret}"
+      upload_request: "{APP_BASE_URL}/r/{public_id}#{secret}"
+    public_id:
+      entropy_bits: 128
+      encoding: "base64url_without_padding"
+      purpose: "Identifiziert den Freigabedatensatz, erteilt allein aber keine Berechtigung."
+    secret:
+      entropy_bits: 256
+      encoding: "base64url_without_padding"
+      storage: "Nur HMAC-SHA-256 oder SHA-256-Hash mit serverseitigem Pepper speichern."
+      transport: "URL-Fragment; wird vom Browser nicht im initialen HTTP-Request übertragen."
+    resolution_flow:
+      - "Frontend liest das Fragment lokal."
+      - "Frontend sendet public_id und secret per POST an einen no-store API-Endpunkt."
+      - "Server verifiziert den Hash in Konstantzeit."
+      - "Server erstellt eine kurzlebige, auf die konkrete Freigabe beschränkte Capability-Session."
+      - "Fragment mit history.replaceState aus der sichtbaren URL entfernen."
+      - "Download oder Upload über die Capability-Session ausführen."
+    capability_session:
+      lifetime_minutes: 15
+      cookie_or_header: "kurzlebiges HttpOnly-Cookie bevorzugt"
+      scope: "genau eine share_id oder upload_request_id"
+      reusable_within_lifetime: true
+    legacy_links:
+      token_in_path_allowed: false
+      optional_feature_flag: "ALLOW_LEGACY_TOKEN_IN_PATH_LINKS"
+      warning: "Bei Aktivierung können Geheimnisse in Proxy- und Browser-Logs auftauchen."
+    headers:
+      Referrer-Policy: "no-referrer"
+      Cache-Control: "no-store, private"
+      X-Content-Type-Options: "nosniff"
+      Content-Security-Policy: "default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+
+  file_lifecycle:
+    retention_model:
+      unpinned:
+        configurable_presets:
+          - "15 minutes"
+          - "1 hour"
+          - "6 hours"
+          - "24 hours"
+          - "3 days"
+          - "7 days"
+        default: "24 hours"
+        absolute_maximum: "168 hours from completed upload"
+        expiry_anchor: "upload_completed_at"
+      pinned:
+        expires_at: null
+        automatic_deletion: false
+        public_share_behavior: "Öffentliche Links bleiben unabhängig auf maximal 7 Tage begrenzt."
+      upload_request_links:
+        default: "24 hours"
+        absolute_maximum: "168 hours from creation"
+      download_share_links:
+        default: "24 hours"
+        absolute_maximum: "168 hours from creation"
+    cleanup_worker:
+      interval_minutes: 5
+      startup_cleanup: true
+      behavior:
+        - "Abgelaufene Freigaben deaktivieren."
+        - "Abgelaufene, nicht angepinnte Dateien transaktional als deleting markieren."
+        - "Datei vom Storage entfernen."
+        - "Metadaten nach erfolgreicher Löschung entfernen oder als Tombstone für Audit-Aufbewahrung reduzieren."
+        - "Fehlgeschlagene Löschungen mit Backoff wiederholen."
+        - "Verwaiste temporäre Uploads bereinigen."
+    delete_semantics:
+      owner_delete: "Sofortige logische Deaktivierung; physische Löschung im Hintergrund."
+      cascade:
+        - "Alle Download-Freigaben der Datei widerrufen."
+        - "Aktive Downloads dürfen nicht neu begonnen werden."
+        - "Bereits laufende Streams dürfen konfigurierbar beendet oder abgeschlossen werden; Standard: beenden."
+
+  file_ingestion:
+    accepted_types: "all_binary_types"
+    default_serve_mode: "attachment_only"
+    upload_pipeline:
+      - "Anfrage und Berechtigung vor Annahme größerer Datenmengen prüfen."
+      - "Konfiguriertes Größenlimit serverseitig und möglichst schon am Reverse Proxy erzwingen."
+      - "In zufällige temporäre Datei streamen."
+      - "Während des Streams SHA-256 berechnen."
+      - "Tatsächliche Byteanzahl zählen und gegen Limits prüfen."
+      - "Optional ClamAV-Scan durchführen."
+      - "Bei Erfolg atomar in den finalen Storage verschieben."
+      - "Metadaten in einer Datenbanktransaktion finalisieren."
+      - "Bei Fehler temporäre Daten sicher entfernen."
+    filename_handling:
+      original_filename: "Als Anzeige-Metadatum erhalten, Unicode normalisieren und Länge begrenzen."
+      storage_filename: "Zufällige UUIDv7 oder 256-Bit-ID ohne Originalerweiterung."
+      max_display_length: 255
+      path_components_allowed: false
+      duplicate_names: "Erlaubt; intern immer eindeutige Storage-ID."
+    mime_handling:
+      client_content_type_trusted: false
+      detected_mime_stored: true
+      download_header: "Content-Disposition: attachment mit sicher kodiertem Dateinamen"
+      inline_rendering: false
+    archive_behavior:
+      extract_archives: false
+      inspect_archive_contents: false
+    malware_scanning:
+      mode: "optional"
+      provider_mvp: "ClamAV clamd"
+      states:
+        - "not_configured"
+        - "pending"
+        - "clean"
+        - "infected"
+        - "scan_error"
+      fail_policy_default: "quarantine_on_scan_error"
+      infected_behavior:
+        - "Nicht in normalen Storage übernehmen."
+        - "Keine Download-Freigabe erlauben."
+        - "Owner deutlich warnen."
+        - "Löschen oder isoliert behalten als Adminentscheidung."
+    resumable_uploads:
+      phase: 2
+      protocol: "tus 1.0"
+      required_when_enabled:
+        - "Upload-Offset serverseitig validieren."
+        - "Limits vor und während des Uploads erzwingen."
+        - "Abgebrochene Uploads automatisch bereinigen."
+        - "Capability- und Owner-Berechtigungen unverändert anwenden."
+
+  owner_file_management:
+    actions:
+      - "upload"
+      - "download"
+      - "rename_display_name"
+      - "pin"
+      - "unpin_with_new_expiry"
+      - "change_expiry_within_limits"
+      - "create_download_share"
+      - "revoke_download_share"
+      - "copy_sha256"
+      - "delete"
+      - "bulk_delete"
+      - "bulk_pin"
+      - "bulk_change_expiry"
+    metadata_visible:
+      - "display_name"
+      - "size_bytes"
+      - "created_at"
+      - "upload_source"
+      - "expires_at"
+      - "pinned"
+      - "sha256"
+      - "detected_mime"
+      - "malware_scan_state"
+      - "download_count_owner"
+      - "download_count_public"
+      - "active_share_count"
+    search:
+      fields:
+        - "display_name"
+        - "detected_mime"
+        - "sha256"
+      server_side: true
+    sorting:
+      options:
+        - "newest"
+        - "oldest"
+        - "name"
+        - "size_desc"
+        - "expires_soon"
+    filters:
+      - "pinned"
+      - "expiring"
+      - "shared"
+      - "uploaded_by_request"
+      - "scan_state"
+
+  download_shares:
+    scope:
+      types:
+        - "single_file"
+        - "multiple_files_as_share_page"
+      zip_download_phase: 2
+    creation_options:
+      expires_in:
+        presets:
+          - "15 minutes"
+          - "1 hour"
+          - "6 hours"
+          - "24 hours"
+          - "3 days"
+          - "7 days"
+        maximum: "7 days"
+      max_downloads:
+        nullable: true
+        minimum: 1
+        maximum: 10000
+      require_additional_passphrase:
+        default: false
+        phase: 2
+      download_behavior:
+        options:
+          - "show_landing_page"
+          - "start_download_after_resolution"
+        default: "show_landing_page"
+      custom_label:
+        max_length: 100
+        optional: true
+    public_page:
+      may_show:
+        - "owner-defined label"
+        - "safe display filename"
+        - "file size"
+        - "remaining availability as coarse duration"
+      must_not_show:
+        - "owner identity"
+        - "other files"
+        - "storage path"
+        - "internal IDs"
+        - "exact server diagnostics"
+        - "total storage usage"
+    accounting:
+      count_when: "Download-Stream erfolgreich gestartet und mindestens ein konfigurierbarer Mindestanteil übertragen wurde."
+      default_minimum_bytes: 1048576
+      small_file_behavior: "Bei Dateien unter 1 MiB nach vollständiger Übertragung zählen."
+      race_condition_handling: "Atomare Reservierung eines Download-Slots vor Streambeginn."
+    revoke:
+      immediate: true
+      owner_action: true
+
+  upload_requests:
+    security_property: "write_only"
+    hard_rules:
+      - "Linkinhaber dürfen niemals vorhandene Dateien oder andere Einreichungen auflisten."
+      - "Linkinhaber dürfen hochgeladene Dateien nicht herunterladen."
+      - "Dateinamen anderer Einreichungen dürfen nicht offengelegt werden."
+      - "Upload-Erfolg darf keine internen Storage-IDs offenlegen."
+    creation_options:
+      title:
+        default: "Dateien hochladen"
+        max_length: 100
+      message:
+        optional: true
+        max_length: 500
+      expires_in:
+        default: "24 hours"
+        maximum: "7 days"
+      max_files_per_submission:
+        default: 10
+        minimum: 1
+        maximum: 100
+      max_submissions:
+        default: 1
+        nullable_for_unlimited_within_expiry: true
+        maximum: 10000
+      max_file_size_bytes:
+        default_source: "DEFAULT_MAX_FILE_BYTES"
+        maximum_source: "ABSOLUTE_MAX_FILE_BYTES"
+      max_total_bytes_per_submission:
+        default: 10737418240
+        human_default: "10 GiB"
+      max_total_bytes_all_submissions:
+        nullable: true
+      allowed_extensions:
+        mode: "optional_allowlist"
+        case_insensitive: true
+      denied_extensions:
+        mode: "optional_denylist"
+        warning: "Nie als alleinige Sicherheitsmaßnahme verwenden."
+      optional_submitter_fields:
+        display_name:
+          enabled_default: false
+          required_configurable: true
+          max_length: 100
+        message:
+          enabled_default: false
+          required_configurable: false
+          max_length: 500
+      notify_owner_on_submission:
+        default: true
+        channels:
+          - "in_app_activity"
+          - "apprise_if_configured"
+      retain_uploaded_files_for:
+        default: "7 days"
+        maximum: "7 days"
+        note: "Owner kann eingegangene Dateien anschließend anpinnen."
+    upload_page:
+      shows:
+        - "Titel"
+        - "optionale Nachricht"
+        - "zulässige maximale Dateigröße"
+        - "maximale Anzahl Dateien pro Einreichung"
+        - "optional erlaubte Dateitypen"
+        - "Ablaufstatus"
+      hides:
+        - "Anzahl bereits empfangener Einreichungen, sofern nicht für UX nötig"
+        - "Dateinamen anderer Personen"
+        - "Owner-Dateiliste"
+        - "interne Limits und IDs"
+      after_success:
+        - "Neutrale Erfolgsbestätigung anzeigen."
+        - "Einreichungsreferenz als zufällige, nicht sicherheitsrelevante Kurz-ID anzeigen."
+        - "Keine Downloadmöglichkeit anbieten."
+        - "Weitere Einreichung nur erlauben, wenn das Limit dies zulässt."
+    owner_view:
+      group_by_submission: true
+      actions:
+        - "download individual file"
+        - "download submission as zip in phase 2"
+        - "pin selected files"
+        - "rename"
+        - "delete"
+        - "revoke upload request"
+
+  storage_protection:
+    capacity_controls:
+      configured_quota: "MAX_STORAGE_BYTES"
+      reject_new_upload_threshold_percent: 98
+      warning_threshold_percent: 85
+      critical_threshold_percent: 95
+      temp_space_reserved_percent: 5
+    deduplication:
+      mvp: false
+      reason: "Vermeidet Referenzzählungs- und Informationsleck-Komplexität im ersten Release."
+    at_rest_encryption:
+      phase: 2
+      enabled_by_feature_flag: true
+      design:
+        algorithm: "Streaming AEAD über etablierte Bibliothek, z. B. libsodium secretstream XChaCha20-Poly1305"
+        per_file_key: true
+        key_wrapping: "Per-file key mit APP_MASTER_KEY verschlüsseln."
+        integrity_required: true
+        migration_required: true
+      prohibited:
+        - "Eine große Datei als einzelnes AES-GCM-Paket vollständig in den RAM laden."
+        - "Eigene Chunk-Kryptografie ohne etablierte Konstruktion."
+    backups:
+      requirements:
+        - "Datenbank und Datei-Storage müssen gemeinsam konsistent sicherbar sein."
+        - "Dokumentiere einen Wartungs-/Snapshot-Modus."
+        - "APP_MASTER_KEY und Recovery-Codes gehören nicht in unverschlüsselte Backups."
+
+  data_model:
+    tables:
+      owner_config:
+        primary_key: "singleton_id"
+        fields:
+          - "encrypted_totp_secret"
+          - "totp_digits"
+          - "totp_period_seconds"
+          - "totp_algorithm"
+          - "last_accepted_totp_step"
+          - "setup_completed_at"
+          - "created_at"
+          - "updated_at"
+      recovery_codes:
+        primary_key: "id"
+        fields:
+          - "argon2id_hash"
+          - "used_at"
+          - "created_at"
+      sessions:
+        primary_key: "id"
+        fields:
+          - "token_hash"
+          - "created_at"
+          - "last_seen_at"
+          - "expires_at"
+          - "ip_prefix_hash"
+          - "user_agent_hash"
+          - "revoked_at"
+      files:
+        primary_key: "id_uuidv7"
+        fields:
+          - "display_name"
+          - "storage_key"
+          - "size_bytes"
+          - "sha256"
+          - "client_mime"
+          - "detected_mime"
+          - "upload_source_type"
+          - "upload_request_id"
+          - "submission_id"
+          - "created_at"
+          - "upload_completed_at"
+          - "expires_at"
+          - "pinned_at"
+          - "scan_state"
+          - "scan_detail_safe"
+          - "deletion_state"
+      download_shares:
+        primary_key: "id_uuidv7"
+        fields:
+          - "public_id"
+          - "secret_hash"
+          - "label"
+          - "created_at"
+          - "expires_at"
+          - "max_downloads"
+          - "download_count"
+          - "revoked_at"
+          - "behavior"
+      download_share_files:
+        primary_key: "share_id,file_id"
+        fields:
+          - "share_id"
+          - "file_id"
+      upload_requests:
+        primary_key: "id_uuidv7"
+        fields:
+          - "public_id"
+          - "secret_hash"
+          - "title"
+          - "message"
+          - "created_at"
+          - "expires_at"
+          - "max_files_per_submission"
+          - "max_submissions"
+          - "submission_count"
+          - "max_file_size_bytes"
+          - "max_total_bytes_per_submission"
+          - "max_total_bytes_all_submissions"
+          - "accepted_total_bytes"
+          - "allowed_extensions_json"
+          - "denied_extensions_json"
+          - "submitter_name_mode"
+          - "submitter_message_mode"
+          - "retain_seconds"
+          - "revoked_at"
+      submissions:
+        primary_key: "id_uuidv7"
+        fields:
+          - "upload_request_id"
+          - "public_reference"
+          - "submitter_name"
+          - "submitter_message"
+          - "source_ip_hash"
+          - "created_at"
+          - "completed_at"
+          - "file_count"
+          - "total_bytes"
+          - "state"
+      capability_sessions:
+        primary_key: "id"
+        fields:
+          - "token_hash"
+          - "scope_type"
+          - "scope_id"
+          - "created_at"
+          - "expires_at"
+          - "source_ip_prefix_hash"
+      audit_events:
+        primary_key: "id_uuidv7"
+        fields:
+          - "event_type"
+          - "severity"
+          - "created_at"
+          - "actor_type"
+          - "actor_reference"
+          - "source_ip_hash"
+          - "metadata_json_redacted"
+    database_rules:
+      - "Foreign Keys aktivieren."
+      - "Zeitwerte als UTC speichern."
+      - "Limits und Zähler atomar aktualisieren."
+      - "Secrets, Roh-Tokens, TOTP-Codes und vollständige IP-Adressen nie in Audit-Metadaten speichern."
+
+  api_contract:
+    prefix: "/api"
+    format: "JSON except streamed file bodies"
+    owner_routes:
+      - "POST /auth/totp/login"
+      - "POST /auth/recovery/login"
+      - "POST /auth/logout"
+      - "POST /auth/logout-all"
+      - "GET /files"
+      - "POST /files/upload/init"
+      - "POST /files/upload/complete"
+      - "GET /files/{file_id}"
+      - "GET /files/{file_id}/download"
+      - "PATCH /files/{file_id}"
+      - "DELETE /files/{file_id}"
+      - "POST /download-shares"
+      - "GET /download-shares"
+      - "DELETE /download-shares/{share_id}"
+      - "POST /upload-requests"
+      - "GET /upload-requests"
+      - "GET /upload-requests/{request_id}"
+      - "DELETE /upload-requests/{request_id}"
+      - "GET /activity"
+      - "GET /admin/diagnostics"
+      - "GET /admin/logs"
+    public_routes:
+      - "POST /public/download-shares/resolve"
+      - "GET /public/download-shares/session/info"
+      - "GET /public/download-shares/session/download/{file_ref}"
+      - "POST /public/upload-requests/resolve"
+      - "GET /public/upload-requests/session/info"
+      - "POST /public/upload-requests/session/submissions/init"
+      - "POST /public/upload-requests/session/submissions/{submission_ref}/files"
+      - "POST /public/upload-requests/session/submissions/{submission_ref}/complete"
+    required_http_behavior:
+      invalid_capability: "404 statt Unterscheidung zwischen unbekannt, abgelaufen und widerrufen"
+      oversized_upload: 413
+      rate_limited: 429
+      unauthorized_owner: 401
+      forbidden_scope: 403
+      conflict_limit_exhausted: 409
+      no_store_for_sensitive_responses: true
+      request_id_header: "X-Request-ID"
+
+  security_controls:
+    transport:
+      https_required: true
+      hsts_at_reverse_proxy: true
+    application_headers:
+      - "Content-Security-Policy"
+      - "Referrer-Policy: no-referrer"
+      - "X-Content-Type-Options: nosniff"
+      - "Permissions-Policy with unnecessary features disabled"
+      - "Cross-Origin-Opener-Policy: same-origin"
+      - "Cross-Origin-Resource-Policy: same-origin where compatible"
+    csrf:
+      owner_mutations: "Synchronizer token plus SameSite=Strict session cookie"
+      capability_mutations: "Capability-session-bound CSRF token"
+    cors:
+      default: "same-origin only"
+      wildcard_allowed: false
+    logging_redaction:
+      redact:
+        - "Authorization"
+        - "Cookie"
+        - "Set-Cookie"
+        - "TOTP fields"
+        - "capability secrets"
+        - "recovery codes"
+        - "setup secret"
+        - "master key"
+        - "query strings on sensitive routes"
+    brute_force_protection:
+      rate_limits_required: true
+      uniform_response_timing: true
+      constant_time_secret_compare: true
+    upload_security:
+      - "Dateien außerhalb des Web-Roots speichern."
+      - "Keine Dateipfade aus Benutzereingaben bilden."
+      - "Alle Downloads als Attachment ausliefern."
+      - "Keine serverseitige Ausführung oder Vorschau."
+      - "Dateigröße während des Streams kontrollieren."
+      - "Temporäre Uploads mit restriktiven Rechten anlegen."
+      - "Optional Malware-Scan und Quarantäne."
+    privacy:
+      analytics: false
+      third_party_resources: false
+      full_ip_storage: false
+      ip_hash_rotation_days: 7
+      access_log_token_protection: true
+    dependency_security:
+      - "Lockfile verpflichtend."
+      - "Automatisierte Dependency-Updates konfigurieren."
+      - "Container- und Dependency-Scan in CI."
+      - "Keine unmaintained Upload- oder Kryptobibliotheken verwenden."
+
+  user_interface:
+    information_architecture:
+      mobile_navigation:
+        type: "floating_bottom_navigation"
+        sections:
+          - id: "files"
+            label: "Dateien"
+            icon: "folder"
+          - id: "requests"
+            label: "Upload-Links"
+            icon: "move_to_inbox"
+          - id: "activity"
+            label: "Aktivität"
+            icon: "history"
+      desktop_navigation:
+        type: "left_navigation_rail"
+        sections:
+          - "Dateien"
+          - "Upload-Links"
+          - "Aktivität"
+        settings_entry: "three_dot_overflow_or_gear_secondary_control"
+    routes:
+      - path: "/login"
+        view: "totp_login"
+      - path: "/setup"
+        view: "first_run_setup"
+      - path: "/"
+        redirect: "/files"
+      - path: "/files"
+        view: "owner_files"
+      - path: "/files/{file_id}"
+        view: "file_detail"
+      - path: "/requests"
+        view: "upload_request_list"
+      - path: "/requests/{request_id}"
+        view: "upload_request_detail"
+      - path: "/activity"
+        view: "audit_activity"
+      - path: "/s/{public_id}"
+        view: "public_download_share"
+      - path: "/r/{public_id}"
+        view: "public_upload_request"
+    owner_files_view:
+      header:
+        left: "logical app symbol + Dropiku"
+        right:
+          - "search on desktop"
+          - "three-dot overflow"
+        prohibited:
+          - "version"
+          - "build date"
+          - "Git SHA"
+          - "server status chip"
+          - "storage quota in header"
+      hero_card:
+        purpose: "Schneller Upload"
+        controls:
+          - "drag and drop zone"
+          - "Dateien auswählen"
+          - "Ablaufdauer"
+          - "Nach Upload anpinnen toggle"
+        upload_progress:
+          - "per-file progress"
+          - "total progress"
+          - "pause/resume only when tus enabled"
+          - "cancel"
+      file_list:
+        mobile: "rounded file cards"
+        desktop: "calm table with selectable rows"
+        primary_metadata:
+          - "filename"
+          - "size"
+          - "expiry countdown or pinned"
+        secondary_metadata:
+          - "share count"
+          - "scan state"
+          - "created time"
+        quick_actions:
+          - "download"
+          - "share"
+          - "pin/unpin"
+          - "more"
+      empty_state:
+        icon: "cloud_upload"
+        title: "Noch keine Dateien"
+        hint: "Lade eine Datei hoch, um sie später auf einem anderen Gerät abzurufen."
+        action: "Datei auswählen"
+    upload_request_dialog:
+      mobile_presentation: "bottom sheet"
+      desktop_presentation: "dialog or right side sheet"
+      sections:
+        - "Titel und Nachricht"
+        - "Gültigkeit"
+        - "Anzahl Einreichungen"
+        - "Dateien pro Einreichung"
+        - "Maximale Dateigröße"
+        - "Maximale Gesamtgröße"
+        - "optionale Dateitypen"
+        - "optionale Absenderfelder"
+        - "Benachrichtigung"
+      result:
+        - "kryptischen Link anzeigen"
+        - "kopieren"
+        - "QR-Code lokal erzeugen"
+        - "Link widerrufen"
+    share_dialog:
+      mobile_presentation: "bottom sheet"
+      desktop_presentation: "dialog"
+      controls:
+        - "Gültigkeit"
+        - "maximale Downloads"
+        - "Landing Page oder direkter Start"
+        - "optionale Bezeichnung"
+      result:
+        - "Link kopieren"
+        - "QR-Code anzeigen"
+        - "Test in privatem Fenster Hinweis"
+    activity_view:
+      events:
+        - "owner_login_success"
+        - "owner_login_failed_rate_limited_summary"
+        - "file_uploaded"
+        - "file_downloaded_owner"
+        - "file_downloaded_public"
+        - "share_created"
+        - "share_revoked"
+        - "upload_request_created"
+        - "submission_received"
+        - "file_expired_deleted"
+        - "malware_scan_warning"
+      privacy: "Keine Roh-IP, Tokens oder vollständigen User-Agent-Strings anzeigen."
+    public_download_view:
+      layout:
+        - "minimaler App-Header ohne Owner-Navigation"
+        - "eine zentrale Dateikarte oder Freigabekarte"
+        - "Download-Button"
+        - "Ablaufhinweis"
+      errors: "Einheitliche Seite 'Link nicht verfügbar'."
+    public_upload_view:
+      layout:
+        - "minimaler App-Header"
+        - "Titel und optionale Nachricht"
+        - "Upload-Dropzone"
+        - "klare Limits"
+        - "Fortschritt"
+        - "neutrale Erfolgsbestätigung"
+      prohibited:
+        - "Owner-Dateiliste"
+        - "Download-Schaltflächen"
+        - "andere Einreichungen"
+
+  design_system:
+    source_of_truth: "pixel_design.yaml"
+    visual_references:
+      - "palette.png"
+      - "components.png"
+      - "menu.png"
+      - "mockup_mobile.png"
+      - "mockup_desktop.png"
+    system_name: "Pixel Soft Utility"
+    required_themes:
+      - "lavender"
+      - "mint"
+      - "sky"
+      - "amber"
+      - "graphite"
+    required_modes:
+      - "system"
+      - "light"
+      - "dark"
+    local_storage_keys:
+      theme: "dropiku-theme"
+      mode: "dropiku-mode"
+      reduce_motion: "dropiku-reduce-motion"
+    rules:
+      - "CSS Custom Properties und semantische Tokens aus pixel_design.yaml verwenden."
+      - "Keine feste App-Akzentfarbe."
+      - "Logisches cloud_upload/folder-Symbol statt separatem Markenlogo."
+      - "Material Symbols Rounded oder lokal gebündelte, gleichwertige Icons."
+      - "Große Radien, pillenförmige Controls, ruhige tonale Flächen."
+      - "Mindestens 44 px große Touch-Ziele."
+      - "WCAG AA, Tastaturnavigation und sichtbare Fokuszustände."
+      - "prefers-reduced-motion beachten."
+      - "Technische Informationen nur unter About/Admin Info."
+    settings_and_about:
+      entry: "three-dot overflow"
+      mobile: "rounded bottom sheet"
+      desktop: "right side sheet"
+      sections:
+        appearance:
+          - "System/Light/Dark"
+          - "Lavender/Mint/Sky/Amber/Graphite"
+          - "Reduce motion"
+        app_info:
+          - "App name"
+          - "Version"
+          - "Build date"
+          - "Git SHA"
+        admin_info:
+          - "Storage usage"
+          - "Database status"
+          - "Cleanup worker status"
+          - "ClamAV status"
+          - "Server time status"
+          - "active sessions"
+          - "diagnostics"
+          - "logs"
+        security:
+          - "TOTP neu einrichten"
+          - "Recovery-Codes neu erzeugen"
+          - "Alle Sessions abmelden"
+          - "Alle öffentlichen Links widerrufen"
+        advanced:
+          - "lokale UI-Einstellungen zurücksetzen"
+          - "Debug-Details kopieren"
+    responsive_behavior:
+      mobile:
+        max_content_width: "460px"
+        layout: "single column, app-like"
+        settings: "bottom sheet"
+        file_view: "cards"
+        bottom_safe_area: true
+      tablet:
+        layout: "adaptive two-column where useful"
+      desktop:
+        max_content_width: "1280px"
+        layout: "left rail + dashboard content"
+        settings: "right side sheet"
+        file_view: "table"
+
+  notifications:
+    in_app:
+      required: true
+      toasts:
+        - "upload completed"
+        - "link copied"
+        - "share revoked"
+        - "settings saved"
+        - "non-blocking error"
+    apprise:
+      optional: true
+      events_default:
+        - "upload request submission completed"
+        - "storage critical"
+        - "malware detected"
+      secrets_redacted: true
+
+  observability:
+    logs:
+      format: "structured JSON"
+      levels:
+        - "debug"
+        - "info"
+        - "warn"
+        - "error"
+      retention_days_default: 14
+      downloadable_from_admin: true
+      token_redaction_required: true
+    metrics:
+      phase: 2
+      format: "Prometheus"
+      endpoint: "/metrics"
+      default_public: false
+    diagnostics:
+      checks:
+        - "database readable and writable"
+        - "storage readable and writable"
+        - "free disk space"
+        - "cleanup worker heartbeat"
+        - "server clock sanity"
+        - "reverse proxy HTTPS awareness"
+        - "ClamAV connectivity if configured"
+        - "master key decrypt test"
+      must_not_expose_secrets: true
+    audit_retention_days_default: 30
+
+  background_jobs:
+    scheduler:
+      type: "single-process lease with database lock"
+      safe_for_single_replica: true
+    jobs:
+      - id: "expiry_cleanup"
+        cadence: "every 5 minutes"
+      - id: "orphan_temp_cleanup"
+        cadence: "hourly"
+      - id: "audit_retention_cleanup"
+        cadence: "daily"
+      - id: "log_retention_cleanup"
+        cadence: "daily"
+      - id: "storage_health_check"
+        cadence: "every 5 minutes"
+
+  ci_cd:
+    repository_requirements:
+      - "README.md nach dem gemeinsamen Ishiku/Pixel-Soft-Utility-Muster."
+      - "appspec.yaml im Repository-Root."
+      - "pixel_design.yaml und benötigte lokale Design-Tokens einbinden."
+      - "LICENSE nach Nutzerentscheidung."
+      - "SECURITY.md mit privatem Meldeweg."
+      - ".env.example ohne echte Geheimnisse."
+      - "docker-compose.example.yml für ZimaOS-orientierten Betrieb."
+    pipeline:
+      - "lint"
+      - "typecheck"
+      - "unit tests"
+      - "integration tests"
+      - "frontend build"
+      - "Docker build amd64/arm64"
+      - "dependency vulnerability scan"
+      - "container vulnerability scan"
+      - "SBOM generation"
+    build_metadata:
+      inject:
+        - "version"
+        - "build date"
+        - "Git SHA"
+      ui_location: "About/Admin Info only"
+
+  testing:
+    unit_tests_required:
+      - "10-digit TOTP generation and verification including leading zeros"
+      - "TOTP boundary at 30-second rollover"
+      - "TOTP replay rejection"
+      - "rate-limit escalation and Retry-After"
+      - "capability token hash verification"
+      - "expiry calculation max 168 hours"
+      - "pin/unpin state transitions"
+      - "upload request byte and count limits"
+      - "safe Content-Disposition encoding"
+      - "filename normalization and path traversal rejection"
+    integration_tests_required:
+      - "first-run setup and two-window TOTP verification"
+      - "owner upload streamed to disk"
+      - "owner download"
+      - "download share resolution using URL fragment secret exchange"
+      - "revoked and expired links return indistinguishable not-available response"
+      - "upload request cannot list or download files"
+      - "concurrent submissions cannot exceed max_submissions"
+      - "concurrent downloads cannot exceed max_downloads"
+      - "cleanup removes expired unpinned files"
+      - "cleanup preserves pinned files"
+      - "public share expiry remains active for pinned files"
+      - "malware scan quarantine flow when ClamAV is configured"
+      - "session expiry and logout-all"
+    end_to_end_tests_required:
+      - "mobile owner login and upload"
+      - "mobile file download"
+      - "create and copy download link"
+      - "create upload request with custom limits"
+      - "anonymous upload via request link"
+      - "owner receives and pins submitted file"
+      - "theme and mode persistence"
+      - "keyboard-only desktop operation"
+    security_tests_required:
+      - "CSRF attempts"
+      - "stored and reflected XSS through filenames and messages"
+      - "path traversal filenames"
+      - "oversized Content-Length and chunked overrun"
+      - "token leakage in logs"
+      - "brute-force rate limiting"
+      - "capability scope confusion"
+      - "IDOR attempts against file IDs"
+      - "malformed archive treated as opaque file"
+
+  acceptance_criteria:
+    release_blockers:
+      - "Owner kann die App ohne erfolgreich getesteten 10-stelligen TOTP nicht einrichten."
+      - "Owner kann sich mit einem gültigen 30-Sekunden-TOTP anmelden."
+      - "Fünf schnelle Fehlversuche lösen ein wirksames Rate-Limit aus."
+      - "Upload und Download streamen ohne vollständiges Puffern im RAM."
+      - "Keine Datei liegt im Web-Root oder unter ihrem Originalnamen."
+      - "Ungepinnte Dateien werden spätestens 168 Stunden nach abgeschlossenem Upload gelöscht."
+      - "Angepinnte Dateien werden nicht automatisch gelöscht."
+      - "Öffentliche Freigaben sind auch für angepinnte Dateien maximal 7 Tage gültig."
+      - "Download-Freigaben können optional durch maximale Downloadzahl begrenzt werden."
+      - "Upload-Anfragen können Ablaufzeit, Dateigröße, Dateianzahl, Einreichungsanzahl und Gesamtgröße begrenzen."
+      - "Upload-Anfragen erlauben keinerlei Auflistung oder Download."
+      - "Freigabe-Geheimnisse erscheinen standardmäßig nicht im HTTP-Pfad oder in Server-Access-Logs."
+      - "TOTP-Secrets, Recovery-Codes und Capability-Secrets werden nie im Klartext geloggt."
+      - "Mobile und Desktop UI folgen dem Pixel Soft Utility Designsystem."
+      - "System/Light/Dark sowie Lavender/Mint/Sky/Amber/Graphite funktionieren und werden lokal persistiert."
+      - "Version, Build-Datum, Git SHA, Diagnostik und Logs befinden sich ausschließlich in About/Admin Info."
+      - "Docker-Image läuft als Non-Root auf amd64 und arm64."
+    performance_targets:
+      initial_page_load_gzip_kib_max: 350
+      api_metadata_p95_ms_local_network: 250
+      upload_memory_overhead_mib_per_stream_max: 32
+      download_memory_overhead_mib_per_stream_max: 16
+      sqlite_busy_retries_required: true
+
+  phased_delivery:
+    phase_1_mvp:
+      includes:
+        - "Single-user first-run setup"
+        - "10-digit TOTP login"
+        - "Recovery codes"
+        - "Owner sessions and rate limiting"
+        - "Streamed local filesystem uploads/downloads"
+        - "File expiry and pinning"
+        - "Single- and multi-file download share page"
+        - "Write-only upload requests with all core limits"
+        - "Capability links with fragment secret"
+        - "Activity log"
+        - "Pixel Soft Utility responsive UI"
+        - "Docker image and Compose example"
+        - "Optional ClamAV integration"
+    phase_2:
+      includes:
+        - "tus resumable uploads"
+        - "ZIP download for multi-file shares and submissions"
+        - "Optional extra passphrase on public shares"
+        - "At-rest file encryption"
+        - "S3-compatible storage driver"
+        - "Prometheus metrics"
+        - "Apprise notifications"
+    explicitly_deferred:
+      - "Multi-user accounts"
+      - "Public registration"
+      - "Folder sync client"
+      - "Inline media previews"
+      - "Document conversion"
+      - "Archive extraction"
+
+  practical_extensions_recommended:
+    - id: "clipboard_upload"
+      priority: "high"
+      description: "Bilder und Dateien direkt aus der Zwischenablage in die Upload-Zone einfügen."
+    - id: "qr_links"
+      priority: "high"
+      description: "Download- und Upload-Links lokal als QR-Code anzeigen, um sie schnell zwischen Geräten zu übertragen."
+    - id: "checksums"
+      priority: "high"
+      description: "SHA-256 anzeigen und kopierbar machen, damit große oder wichtige Dateien geprüft werden können."
+    - id: "expiring_soon_filter"
+      priority: "high"
+      description: "Ansicht für Dateien, die in den nächsten 24 Stunden ablaufen."
+    - id: "storage_guard"
+      priority: "high"
+      description: "Uploads vor vollem Datenträger stoppen und klaren Warnzustand anzeigen."
+    - id: "submission_notifications"
+      priority: "medium"
+      description: "Bei eingegangenen Uploads optional über Apprise benachrichtigen."
+    - id: "download_limit_reservation"
+      priority: "high"
+      description: "Downloadplätze atomar reservieren, damit parallele Downloads das Limit nicht umgehen."
+    - id: "one_click_revoke"
+      priority: "high"
+      description: "Alle aktiven Links einer Datei mit einer Aktion widerrufen."
+    - id: "browser_share_target"
+      priority: "medium"
+      description: "PWA Share Target, damit Dateien unter Android direkt an Dropiku geteilt werden können."
+    - id: "optional_client_side_encrypted_share"
+      priority: "low"
+      phase: 3
+      description: "Separate Freigabeart, bei der der Browser vor dem Upload verschlüsselt und der Schlüssel nur im URL-Fragment liegt."
+
+  codex_execution_instructions:
+    objective: >-
+      Implementiere Dropiku vollständig anhand dieser Appspec. Behandle Sicherheitsanforderungen,
+      Lifecycle-Grenzen und Capability-Semantik als verbindlich. Vereinfache sie nicht stillschweigend.
+    required_order:
+      - "Projektstruktur, Konfiguration und Datenmodell anlegen."
+      - "Security primitives, Secret-Verschlüsselung, TOTP und Sessions implementieren."
+      - "Rate-Limits und Audit-Redaction implementieren."
+      - "Streamed file storage und Lifecycle worker implementieren."
+      - "Download shares und write-only upload requests implementieren."
+      - "Owner- und Public-UI nach Pixel Soft Utility umsetzen."
+      - "Tests und Docker-Build vervollständigen."
+      - "README, SECURITY.md, .env.example und Compose-Beispiel erstellen."
+    coding_rules:
+      - "Keine TODO-Platzhalter in sicherheitskritischen Pfaden."
+      - "Keine Mock-Daten im Produktionspfad."
+      - "Keine Secrets in Quellcode, Fixtures, Screenshots oder Logs."
+      - "Bei unklaren Sicherheitsdetails konservativ entscheiden und Entscheidung dokumentieren."
+      - "Jede Route erhält Schema-Validierung, Berechtigungsprüfung und definierte Fehlerantworten."
+      - "Dateistreams müssen Abbruch und Client-Disconnect korrekt behandeln."
+      - "Alle Zähler-Limits transaktional und nebenläufigkeitssicher implementieren."
+      - "Design-Tokens nicht duplizieren oder durch hartcodierte Farben umgehen."
+    completion_definition:
+      - "Alle Phase-1-Akzeptanzkriterien erfüllt."
+      - "Alle verpflichtenden Tests grün."
+      - "Docker Compose startet auf leerem Datenverzeichnis bis zur Setup-Seite."
+      - "Erneuter Start erhält Daten und Setup-Zustand."
+      - "Dokumentierter Backup- und Offline-TOTP-Reset-Ablauf vorhanden."
+
+  standards_and_guidance:
+    - "RFC 6238: Time-Based One-Time Password Algorithm"
+    - "OWASP File Upload Cheat Sheet"
+    - "OWASP Session Management Cheat Sheet"
+    - "OWASP REST Security Cheat Sheet"
+    - "Bitwarden Authenticator documentation for custom TOTP digit lengths"

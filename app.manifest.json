@@ -1,0 +1,39 @@
+{
+  "app_id": "dropiku",
+  "app_name": "Dropiku",
+  "app_subtitle": "Private File Exchange",
+  "app_symbol": "cloud_upload",
+  "app_logo": {
+    "src": "/assets/logos/dropiku.png",
+    "favicon": "/assets/logos/dropiku.png",
+    "alt": "",
+    "use_as_header_symbol": true,
+    "use_as_favicon": true,
+    "use_as_pwa_icon": true,
+    "use_as_about_symbol": true,
+    "use_as_profile_sheet_symbol": true,
+    "use_as_empty_state_symbol": true
+  },
+  "primary_purpose": "Private, temporary file exchange secured with TOTP and capability links.",
+  "main_sections": ["Files", "Upload links", "Activity"],
+  "navigation_complexity": "three_sections",
+  "default_theme": "lavender",
+  "default_mode": "system",
+  "has_account": true,
+  "first_run_setup": {
+    "enabled": true,
+    "route": "/setup",
+    "require_setup_secret": true,
+    "setup_secret_file_env": "APP_SETUP_SECRET_FILE",
+    "setup_secret_env": "APP_SETUP_SECRET",
+    "public_registration_after_first_admin": false
+  },
+  "readme_profile": {
+    "repository_name": "dropiku",
+    "github_owner": "MaroIshiku",
+    "public_repository": true,
+    "short_description": "Dropiku is a private, self-hosted file exchange.",
+    "docker_image": "ghcr.io/maroishiku/dropiku:latest",
+    "codex_notice_enabled": true
+  }
+}

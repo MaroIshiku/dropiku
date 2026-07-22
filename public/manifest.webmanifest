@@ -1,0 +1,19 @@
+{
+  "name": "Dropiku · Private File Exchange",
+  "short_name": "Dropiku",
+  "description": "Private, temporary file exchange secured with TOTP and capability links.",
+  "start_url": "/files",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFFBFF",
+  "theme_color": "#6F55C8",
+  "icons": [
+    { "src": "/assets/logos/dropiku.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "share_target": {
+    "action": "/files?share-target=1",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

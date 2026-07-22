@@ -1,0 +1,37 @@
+services:
+  dropiku:
+    build:
+      context: .
+    image: dropiku:local
+    container_name: dropiku
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      APP_BASE_URL: "${APP_BASE_URL:-https://drop.example.invalid}"
+      APP_SETUP_SECRET_FILE: "/run/secrets/dropiku_setup_secret"
+      APP_MASTER_KEY_FILE: "/run/secrets/dropiku_master_key"
+      TZ: "${TZ:-Europe/Berlin}"
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-false}"
+      MAX_STORAGE_BYTES: "${MAX_STORAGE_BYTES:-107374182400}"
+      DEFAULT_MAX_FILE_BYTES: "${DEFAULT_MAX_FILE_BYTES:-5368709120}"
+      ABSOLUTE_MAX_FILE_BYTES: "${ABSOLUTE_MAX_FILE_BYTES:-21474836480}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    secrets:
+      - dropiku_setup_secret
+      - dropiku_master_key
+    volumes:
+      - ./data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+secrets:
+  dropiku_setup_secret:
+    file: ./secrets/setup_secret.txt
+  dropiku_master_key:
+    file: ./secrets/master_key.txt
