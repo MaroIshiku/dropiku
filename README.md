@@ -50,6 +50,27 @@ The supplied Dropiku icon is used as the application identity without creating a
 
 ## Installation
 
+### CasaOS / ZimaOS
+
+The repository's `docker-compose.yml` is ready for direct CasaOS/ZimaOS import. It uses the published GHCR image, the persistent host directory `/DATA/AppData/dropiku/data`, and environment variables instead of relative Compose secret files. This avoids CasaOS resolving `./secrets/...` below its temporary `/tmp/casaos-compose-app-*` import directory.
+
+Before the first successful start, set these values in the CasaOS app settings:
+
+```text
+APP_BASE_URL=https://drop.example.com
+APP_SETUP_SECRET=<output of: openssl rand -base64 48>
+APP_MASTER_KEY=<output of: openssl rand -base64 32>
+```
+
+`APP_BASE_URL` must be the public HTTPS URL without a trailing slash. Keep `APP_MASTER_KEY` in an encrypted backup outside the ordinary app-data backup. If the bind-mounted data directory is not writable, prepare it once on the host:
+
+```bash
+sudo mkdir -p /DATA/AppData/dropiku/data
+sudo chown -R 10001:10001 /DATA/AppData/dropiku/data
+```
+
+CasaOS exposes the container on host port `8188`. Route that port through an HTTPS reverse proxy before completing setup. The CasaOS compose intentionally does not use top-level Compose `secrets:` because those require pre-existing host files and are not portable through CasaOS's temporary import directory.
+
 ### Docker Compose
 
 Clone the repository and prepare local secret files:
@@ -74,7 +95,7 @@ The container listens on port `8080`. Expose it publicly only through an HTTPS r
 
 ### First launch
 
-Opening Dropiku for the first time redirects to `/setup`. Enter the content of `secrets/setup_secret.txt`, then scan the TOTP QR code. Setup requires two correct 10-digit codes from separate 30-second windows before it can finish.
+Opening Dropiku for the first time redirects to `/setup`. Enter the configured `APP_SETUP_SECRET` value (or the content of `secrets/setup_secret.txt` in the standard Docker setup), then scan the TOTP QR code. Setup requires two correct 10-digit codes from separate 30-second windows before it can finish.
 
 The `digits=10` parameter is not honored by every authenticator. Bitwarden Authenticator is a known compatible choice. Six-digit codes cannot be used with Dropiku.
 
@@ -172,7 +193,7 @@ tar -C . -czf dropiku-data-$(date +%Y%m%d).tar.gz data
 docker compose start dropiku
 ```
 
-Back up `secrets/master_key.txt` separately using encryption. Recovery codes should also remain outside ordinary unencrypted server backups.
+Back up the `APP_MASTER_KEY` value or `secrets/master_key.txt` separately using encryption. Recovery codes should also remain outside ordinary unencrypted server backups.
 
 If every authenticator and recovery code is lost, run this from the host:
 

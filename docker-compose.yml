@@ -1,37 +1,118 @@
+name: dropiku
+
 services:
   dropiku:
-    build:
-      context: .
-    image: dropiku:local
+    image: ghcr.io/maroishiku/dropiku:latest
+    pull_policy: always
     container_name: dropiku
+    hostname: dropiku
     restart: unless-stopped
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 20s
+
     ports:
-      - "8080:8080"
+      - target: 8080
+        published: "8188"
+        protocol: tcp
+
     environment:
       APP_BASE_URL: "${APP_BASE_URL:-https://drop.example.invalid}"
-      APP_SETUP_SECRET_FILE: "/run/secrets/dropiku_setup_secret"
-      APP_MASTER_KEY_FILE: "/run/secrets/dropiku_master_key"
+      APP_SETUP_SECRET: "${APP_SETUP_SECRET:-}"
+      APP_MASTER_KEY: "${APP_MASTER_KEY:-}"
       TZ: "${TZ:-Europe/Berlin}"
       TRUSTED_PROXIES: "${TRUSTED_PROXIES:-false}"
       MAX_STORAGE_BYTES: "${MAX_STORAGE_BYTES:-107374182400}"
       DEFAULT_MAX_FILE_BYTES: "${DEFAULT_MAX_FILE_BYTES:-5368709120}"
       ABSOLUTE_MAX_FILE_BYTES: "${ABSOLUTE_MAX_FILE_BYTES:-21474836480}"
+      MAX_CONCURRENT_UPLOADS: "${MAX_CONCURRENT_UPLOADS:-3}"
+      MAX_CONCURRENT_DOWNLOADS: "${MAX_CONCURRENT_DOWNLOADS:-6}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
-    secrets:
-      - dropiku_setup_secret
-      - dropiku_master_key
+
     volumes:
-      - ./data:/data
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+      - type: bind
+        source: /DATA/AppData/dropiku/data
+        target: /data
+
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: "1.0"
 
-secrets:
-  dropiku_setup_secret:
-    file: ./secrets/setup_secret.txt
-  dropiku_master_key:
-    file: ./secrets/master_key.txt
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+    networks:
+      - dropiku
+
+    labels:
+      icon: https://raw.githubusercontent.com/MaroIshiku/dropiku/main/public/assets/logos/dropiku.png
+      org.opencontainers.image.title: "Dropiku - Private File Exchange"
+      org.opencontainers.image.description: "Private, self-hosted file exchange with TOTP and capability links."
+      org.opencontainers.image.source: "https://github.com/MaroIshiku/dropiku"
+      org.opencontainers.image.url: "https://github.com/MaroIshiku/dropiku"
+
+networks:
+  dropiku:
+    name: dropiku
+    driver: bridge
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: dropiku
+  author: MaroIshiku
+  developer: MaroIshiku
+  category: Utilities
+  store_app_id: dropiku
+  title:
+    custom: Dropiku - Private File Exchange
+    en_us: Dropiku
+    de_de: Dropiku
+  tagline:
+    en_us: Private file exchange with temporary capability links.
+    de_de: Privater Dateiaustausch mit temporaeren Capability-Links.
+  description:
+    en_us: Private, self-hosted file exchange with TOTP owner access, expiring downloads, and write-only upload requests.
+    de_de: Privater, selbst gehosteter Dateiaustausch mit TOTP-Zugang, ablaufenden Downloads und schreibgeschuetzten Upload-Anfragen.
+  icon: https://raw.githubusercontent.com/MaroIshiku/dropiku/main/public/assets/logos/dropiku.png
+  thumbnail: https://raw.githubusercontent.com/MaroIshiku/dropiku/main/public/assets/logos/dropiku.png
+  index: /
+  port_map: "8188"
+  scheme: http
+  is_uncontrolled: false
+  tips:
+    before_install:
+      en_us: |
+        Required before the first successful start: set APP_BASE_URL to the public HTTPS URL, APP_SETUP_SECRET to at least 32 random characters, and APP_MASTER_KEY to exactly 32 random bytes encoded as Base64.
+
+        Generate suitable values with `openssl rand -base64 48` for APP_SETUP_SECRET and `openssl rand -base64 32` for APP_MASTER_KEY. Keep the master key in an encrypted backup; losing it can make the existing owner configuration unusable.
+
+        Persistent data is stored at /DATA/AppData/dropiku/data and mounted at /data. If the container reports a permission error, set ownership on the host with `chown -R 10001:10001 /DATA/AppData/dropiku/data`.
+
+        Dropiku requires HTTPS for secure owner sessions. Publish port 8188 through your HTTPS reverse proxy before completing setup.
+      de_de: |
+        Vor dem ersten erfolgreichen Start erforderlich: APP_BASE_URL auf die oeffentliche HTTPS-URL setzen, APP_SETUP_SECRET mit mindestens 32 zufaelligen Zeichen und APP_MASTER_KEY mit exakt 32 zufaelligen, Base64-kodierten Bytes belegen.
+
+        Geeignete Werte erzeugst du mit `openssl rand -base64 48` fuer APP_SETUP_SECRET und `openssl rand -base64 32` fuer APP_MASTER_KEY. Sichere den Master-Key verschluesselt; bei Verlust kann die bestehende Owner-Konfiguration unbrauchbar werden.
+
+        Persistente Daten liegen unter /DATA/AppData/dropiku/data und werden nach /data gemountet. Meldet der Container einen Berechtigungsfehler, setze auf dem Host mit `chown -R 10001:10001 /DATA/AppData/dropiku/data` den Besitzer.
+
+        Dropiku benoetigt HTTPS fuer sichere Owner-Sitzungen. Veroeffentliche Port 8188 vor dem Setup ueber deinen HTTPS-Reverse-Proxy.
