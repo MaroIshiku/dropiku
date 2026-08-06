@@ -20,9 +20,9 @@ select { appearance: auto; }
 .auth-page { min-height: 100dvh; display: grid; place-items: center; padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom)); }
 .auth-window { width: min(100%, 480px); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-floating); }
 .auth-brand { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
-.auth-brand h1 { font-size: 28px; line-height: 34px; }
+.auth-brand h1 { font-size: var(--type-headline-medium-size); line-height: var(--type-headline-medium-line); font-weight: var(--type-headline-medium-weight); }
 .auth-brand p { color: var(--color-on-surface-muted); }
-.auth-window h2 { font-size: 22px; line-height: 28px; }
+.auth-window h2 { font-size: var(--type-title-large-size); line-height: var(--type-title-large-line); font-weight: var(--type-title-large-weight); }
 .setup-progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); margin-bottom: var(--space-6); }
 .setup-progress span { height: 5px; border-radius: var(--radius-pill); background: var(--color-surface-soft); }
 .setup-progress .is-done { background: var(--color-primary); }
