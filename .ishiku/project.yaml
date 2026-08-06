@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "kit_version": "1.0.1",
+  "kit_version": "1.0.2",
   "application": {
     "id": "dropiku",
     "name": "Dropiku",
@@ -41,7 +41,7 @@
       },
       {
         "name": "application",
-        "command": "npm run check",
+        "command": "npm ci && npm run check",
         "required_for_verified": true
       },
       {
