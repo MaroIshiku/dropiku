@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "contract": {
+    "id": "ishiku-design-5",
+    "version": "5.0.0",
+    "sha256": "46628d1b69e5c27c3a339a31afbb7c3bed8d148b2fb0916c975407d86e9a1516"
+  },
+  "application": {
+    "id": "dropiku",
+    "authentication": "dropiku-totp-vault",
+    "locale": "en"
+  },
+  "implementation": [
+    {
+      "path": "design-system/components.css",
+      "sha256": "6c244cdbdd38fe3823be372e286e22e2b6edcae36b103a043645d25b1e1ac679",
+      "roles": [
+        "components"
+      ]
+    },
+    {
+      "path": "design-system/theme-controller.js",
+      "sha256": "6e98d9d998b8fb57cc37f8291d7beaadec7790a737b0374388793f58f703f686",
+      "roles": [
+        "theme-controller"
+      ]
+    },
+    {
+      "path": "design-system/tokens.css",
+      "sha256": "552c2506cd8726f07a5285274b7cdf7f4fe2de262e26200bf8d2716d2f4422d0",
+      "roles": [
+        "tokens"
+      ]
+    },
+    {
+      "path": "src/client/lib/theme.ts",
+      "sha256": "b1438340eac9c10868d0e44a5119f5861ad9eda21ed642cb372eceba1333a5a5",
+      "roles": [
+        "theme-controller"
+      ]
+    }
+  ]
+}
