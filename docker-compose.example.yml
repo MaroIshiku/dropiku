@@ -1,6 +1,6 @@
 services:
   dropiku:
-    image: ghcr.io/maroishiku/dropiku:latest
+    image: ${DROPIKU_IMAGE:-ghcr.io/maroishiku/dropiku:0.1.0}
     container_name: dropiku
     restart: unless-stopped
     ports:
@@ -10,7 +10,7 @@ services:
       APP_SETUP_SECRET_FILE: "/run/secrets/dropiku_setup_secret"
       APP_MASTER_KEY_FILE: "/run/secrets/dropiku_master_key"
       TZ: "Europe/Berlin"
-      TRUSTED_PROXIES: "false"
+      TRUSTED_PROXIES: "loopback,linklocal,uniquelocal"
       MAX_STORAGE_BYTES: "107374182400"
       DEFAULT_MAX_FILE_BYTES: "5368709120"
       ABSOLUTE_MAX_FILE_BYTES: "21474836480"

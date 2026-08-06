@@ -13,25 +13,25 @@ export function validateAdminSetupInput(input) {
   const normalizedPassword = password.trim().toLowerCase();
 
   if (!setupSecret.trim()) {
-    errors.setupSecret = "Setup-Secret ist erforderlich.";
+    errors.setupSecret = "Setup secret is required.";
   }
   if (!username) {
-    errors.username = "Admin-Benutzername ist erforderlich.";
+    errors.username = "Administrator username is required.";
   }
   if (password.length < 12) {
-    errors.password = "Das Admin-Passwort muss mindestens 12 Zeichen lang sein.";
+    errors.password = "The administrator password must contain at least 12 characters.";
   }
   if (password && setupSecret && password === setupSecret) {
-    errors.password = "Das Admin-Passwort darf nicht mit dem Setup-Secret übereinstimmen.";
+    errors.password = "The administrator password must differ from the setup secret.";
   }
   if (normalizedPassword && BAD_PLACEHOLDER_PASSWORDS.has(normalizedPassword)) {
-    errors.password = "Bitte verwende kein Platzhalter-Passwort.";
+    errors.password = "Do not use a placeholder password.";
   }
   if (normalizedPassword && (normalizedPassword === username.toLowerCase() || normalizedPassword === appId || normalizedPassword === appName)) {
-    errors.password = "Das Admin-Passwort darf nicht Benutzername, App-ID oder App-Name sein.";
+    errors.password = "The administrator password must differ from the username, app ID, and app name.";
   }
   if (password !== passwordConfirm) {
-    errors.passwordConfirm = "Die Passwörter stimmen nicht überein.";
+    errors.passwordConfirm = "The passwords do not match.";
   }
   return {
     valid: Object.keys(errors).length === 0,

@@ -92,7 +92,7 @@ Set `APP_BASE_URL` in `docker-compose.yml` to the public HTTPS URL served by the
 docker compose up -d
 ```
 
-The container listens on port `8080`. Expose it publicly only through an HTTPS reverse proxy. Set `TRUSTED_PROXIES` only to proxies that actually sit in front of the container.
+The container listens on port `8080`. Expose it publicly only through an HTTPS reverse proxy. The container defaults to trusting loopback and private-network proxies so per-IP security controls see the originating client behind common Docker reverse proxies. Restrict `TRUSTED_PROXIES` to the exact proxy address or CIDR when the container port is also reachable by untrusted clients.
 
 ### First launch
 
@@ -125,7 +125,7 @@ Download or copy the recovery codes before confirming setup. They are shown only
 | `DATA_DIR` | `/data` | Persistent data root |
 | `PORT` | `8080` | Internal HTTP port |
 | `TZ` | `Europe/Berlin` | Container time zone |
-| `TRUSTED_PROXIES` | `false` | Fastify trusted-proxy configuration |
+| `TRUSTED_PROXIES` | `loopback,linklocal,uniquelocal` | Fastify trusted-proxy configuration; use the exact proxy address or CIDR where possible |
 | `MAX_STORAGE_BYTES` | `107374182400` | Configured storage quota, 100 GiB by default |
 | `DEFAULT_MAX_FILE_BYTES` | `5368709120` | Default maximum file size, 5 GiB |
 | `ABSOLUTE_MAX_FILE_BYTES` | `21474836480` | Absolute maximum file size, 20 GiB |

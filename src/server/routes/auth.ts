@@ -30,8 +30,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const started = Date.now();
     const ipHash = sourceIpHash(app.appConfig, request.ip);
-    const ipPolicy: RatePolicy = { bucket: "owner-login-ip", key: ipHash, limit: 3, windowMs: 5 * 60_000, escalationSeconds: loginEscalation };
-    const ownerPolicy: RatePolicy = { bucket: "owner-login-owner", key: "owner", limit: 3, windowMs: 5 * 60_000, escalationSeconds: loginEscalation };
+    const ipPolicy: RatePolicy = { bucket: "owner-login-ip-v2", key: ipHash, limit: 3, windowMs: 5 * 60_000, escalationSeconds: loginEscalation };
+    const ownerPolicy: RatePolicy = { bucket: "owner-login-owner-v2", key: "owner", limit: 12, windowMs: 15 * 60_000, escalationSeconds: loginEscalation };
     const ipDecision = checkRateLimit(app.database, app.appConfig, ipPolicy);
     const globalDecision = checkRateLimit(app.database, app.appConfig, ownerPolicy);
     if (!ipDecision.allowed || !globalDecision.allowed) {
@@ -43,22 +43,35 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
     const owner = app.database.orm.select().from(ownerConfig).get();
     let accepted = false;
+    let codeNotFresh = false;
     if (owner && !owner.recoveryRequiredAt) {
       const step = verifyTotp(decryptSmallSecret(app.appConfig, owner.encryptedTotpSecret), request.body.code, Date.now(), owner.totpDigits === 6 ? 6 : 10);
-      if (step !== null && (owner.lastAcceptedTotpStep === null || step > owner.lastAcceptedTotpStep)) {
-        const result = app.database.sqlite.prepare("UPDATE owner_config SET last_accepted_totp_step = ?, updated_at = ? WHERE singleton_id = 1 AND (last_accepted_totp_step IS NULL OR last_accepted_totp_step < ?)").run(step, Date.now(), step);
-        accepted = result.changes === 1;
+      if (step !== null) {
+        if (owner.lastAcceptedTotpStep !== null && step <= owner.lastAcceptedTotpStep) codeNotFresh = true;
+        else {
+          const result = app.database.sqlite.prepare("UPDATE owner_config SET last_accepted_totp_step = ?, updated_at = ? WHERE singleton_id = 1 AND (last_accepted_totp_step IS NULL OR last_accepted_totp_step < ?)").run(step, Date.now(), step);
+          accepted = result.changes === 1;
+          codeNotFresh = !accepted;
+        }
       }
     }
     await minimumResponseTime(started);
     if (!accepted) {
-      recordRateLimitFailure(app.database, app.appConfig, ipPolicy);
-      recordRateLimitFailure(app.database, app.appConfig, ownerPolicy);
+      if (codeNotFresh) {
+        writeAudit(app.database, "owner_login_code_not_fresh", { severity: "warn", actorType: "anonymous", sourceIpHash: ipHash });
+        return sendError(reply, 401, "code_not_fresh", "This code has expired or was already used. Wait for a new code and try again.");
+      }
+      const ipFailure = recordRateLimitFailure(app.database, app.appConfig, ipPolicy);
+      const ownerFailure = recordRateLimitFailure(app.database, app.appConfig, ownerPolicy);
       writeAudit(app.database, "owner_login_failed", { severity: "warn", actorType: "anonymous", sourceIpHash: ipHash });
+      if (!ipFailure.allowed || !ownerFailure.allowed) {
+        reply.header("Retry-After", Math.max(ipFailure.retryAfterSeconds, ownerFailure.retryAfterSeconds));
+        return sendError(reply, 429, "login_locked", lockedLoginMessage);
+      }
       return sendError(reply, 401, "invalid_login", genericLoginMessage);
     }
-    resetRateLimit(app.database, app.appConfig, "owner-login-ip", ipHash);
-    resetRateLimit(app.database, app.appConfig, "owner-login-owner", "owner");
+    resetRateLimit(app.database, app.appConfig, ipPolicy.bucket, ipPolicy.key);
+    resetRateLimit(app.database, app.appConfig, ownerPolicy.bucket, ownerPolicy.key);
     writeAudit(app.database, "owner_login_success", { actorType: "owner", sourceIpHash: ipHash });
     const result = createOwnerSession(app.database, app.appConfig, request, reply);
     const csrfCookie = app.appConfig.secureCookies ? "__Host-dropiku_csrf_hint" : "dropiku_csrf_hint";

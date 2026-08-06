@@ -73,7 +73,7 @@ describe("phase-one workflow", () => {
     expect(ownerFiles.json().files).toHaveLength(1);
   });
 
-  it("supports standard six-digit TOTP and locks the IP and owner after three failures", async () => {
+  it("supports six-digit TOTP, ignores reused codes for rate limits, and isolates IP lockouts", async () => {
     const fixture = await testApp(); cleanup = fixture.close;
     const unlock = await fixture.app.inject({ method: "POST", url: "/api/setup/unlock", payload: { setupSecret: fixture.config.setupSecret, digits: 6 } });
     expect(unlock.statusCode).toBe(200);
@@ -92,15 +92,22 @@ describe("phase-one workflow", () => {
     expect(status.json().totpDigits).toBe(6);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const failed = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "203.0.113.7", payload: { code: "000000" } });
-      expect(failed.statusCode).toBe(401);
+      const reused = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "203.0.113.6", payload: { code: generateTotpCode(secret, now, 6) } });
+      expect(reused.statusCode).toBe(401);
+      expect(reused.json().error).toBe("code_not_fresh");
+    }
+    const currentCode = generateTotpCode(secret, now, 6);
+    const invalidCode = currentCode === "000000" ? "000001" : "000000";
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const failed = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "203.0.113.7", payload: { code: invalidCode } });
+      expect(failed.statusCode).toBe(attempt < 2 ? 401 : 429);
     }
     const locked = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "203.0.113.7", payload: { code: generateTotpCode(secret, now + 30_000, 6) } });
     expect(locked.statusCode).toBe(429);
     expect(Number(locked.headers["retry-after"])).toBeGreaterThan(0);
     expect(Number(locked.headers["retry-after"])).toBeLessThanOrEqual(30);
-    const ownerWideLock = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "198.51.100.9", payload: { code: generateTotpCode(secret, now + 30_000, 6) } });
-    expect(ownerWideLock.statusCode).toBe(429);
+    const otherIpLogin = await fixture.app.inject({ method: "POST", url: "/api/auth/totp/login", remoteAddress: "198.51.100.9", payload: { code: generateTotpCode(secret, now + 30_000, 6) } });
+    expect(otherIpLogin.statusCode).toBe(200);
   });
 
   it("rejects traversal names and oversized streamed uploads before committing", async () => {

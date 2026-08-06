@@ -1,0 +1,10 @@
+{
+  "id": "DEC-002",
+  "date": "2026-08-05",
+  "decision": "Dropiku remains a single-vault product without additional login methods.",
+  "rationale": "Explicit product-owner decision.",
+  "consequences": [
+    "The standard account authentication profile does not apply.",
+    "Vault-specific security tests remain mandatory."
+  ]
+}

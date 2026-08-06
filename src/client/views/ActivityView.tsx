@@ -6,7 +6,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { useToast } from "../components/Toast";
 
 const eventLabels: Record<string, string> = {
-  owner_login_success: "Owner signed in", owner_login_failed: "A sign-in attempt failed", file_uploaded: "File uploaded",
+  owner_login_success: "Owner signed in", owner_login_failed: "A sign-in attempt failed", owner_login_code_not_fresh: "An expired or reused code was rejected", file_uploaded: "File uploaded",
   file_downloaded_owner: "File downloaded", file_downloaded_public: "Shared file downloaded", share_created: "Download link created",
   share_revoked: "Download link revoked", upload_request_created: "Upload link created", upload_request_revoked: "Upload link revoked",
   submission_received: "New submission received", file_expired_deleted: "Expired file deleted", setup_completed: "Setup completed",
