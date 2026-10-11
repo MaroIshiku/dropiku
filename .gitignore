@@ -32,3 +32,7 @@ source-assets/
 *.bak
 .ishiku/reports/*.json
 !.ishiku/reports/ops-001-verification.json
+
+# Local sync conflict copies
+*_Marlo_Desktop.*
+.git-action-updates.json

@@ -47,7 +47,7 @@
       },
       {
         "name": "container",
-        "command": "docker build -t dropiku:verify .",
+        "command": "docker build --load -t dropiku:verify .",
         "required_for_verified": true
       }
     ]

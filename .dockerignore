@@ -23,3 +23,9 @@ source-assets
 *.db
 *.bak
 .ishiku/reports
+
+# Synthetic test data and local sync conflict copies
+data-e2e
+data-visual-qa
+playwright-report
+*_Marlo_Desktop.*

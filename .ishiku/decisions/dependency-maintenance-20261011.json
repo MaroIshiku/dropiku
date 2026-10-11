@@ -1,0 +1,97 @@
+{
+  "id": "MAINT-20261011",
+  "date": "2026-10-11",
+  "risk_class": "C",
+  "requirements": [
+    "CORE-001",
+    "AUTH-001",
+    "OPS-001",
+    "REL-001"
+  ],
+  "changes": [
+    "Update all runtime and development npm dependencies to current compatible stable versions",
+    "TypeScript deliberately capped at 6.0.3 because typescript-eslint 8.71.1 requires <6.1.0",
+    "Node 24.21.0 LTS and distroless Debian 13 pinned by multi-architecture digest",
+    "Build native SQLite in a tool-equipped build stage; explicitly allow reviewed native/build install scripts",
+    "Refresh transitive packages and override esbuild used by the deprecated development loader",
+    "Gate latest publishing on full verification and security scan; update every Action pin",
+    "Restore the coherent committed kit after reviewing stale local/staged variants; preserve original patches in local Git metadata",
+    "Normalize text line endings and ignore local desktop sync conflict copies"
+  ],
+  "failure_evidence": [
+    "https://github.com/MaroIshiku/dropiku/actions/runs/37296350372",
+    "https://github.com/MaroIshiku/dropiku/actions/runs/36715767406"
+  ],
+  "compatibility": "No app schema/data migration, authentication change, route change or port change. Retains 6/10-digit single-vault TOTP and existing recovery/session behavior. file-type is used via fileTypeFromFile, so removed Node stream API is not used. SQLite storage format remains compatible.",
+  "rollback": "Revert the maintenance commit and redeploy the previous immutable image digest after backing up /data. No migration applied.",
+  "license_review": "Direct dependencies retain MIT, Apache-2.0, ISC or BSD licenses. better-sqlite3 replaces prebuild-install with node-addon-api (MIT); no GPL/AGPL direct dependency introduced. All package-lock licenses will be reviewed before publish. Transitive Lightning CSS MPL-2.0 binaries are unmodified build-only dependencies; the distributed app contains generated CSS rather than Lightning CSS code. License notices remain available in the dependency lock/source distribution.",
+  "actions": {
+    "actions/checkout": {
+      "tag": "v7.0.1",
+      "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "published": "2026-07-20T15:10:05Z"
+    },
+    "actions/setup-node": {
+      "tag": "v7.1.0",
+      "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "published": "2026-10-08T02:52:34Z"
+    },
+    "docker/setup-buildx-action": {
+      "tag": "v4.4.1",
+      "sha": "f87e5991a6d7451dcb8d9637bfbc97413f497069",
+      "published": "2026-09-16T07:50:21Z"
+    },
+    "docker/build-push-action": {
+      "tag": "v7.4.0",
+      "sha": "c3c9e263c25d99ce0380d002d59b67737d91b0dc",
+      "published": "2026-09-15T08:22:01Z"
+    },
+    "actions/upload-artifact": {
+      "tag": "v7.0.2",
+      "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+      "published": "2026-10-07T10:08:14Z"
+    },
+    "docker/login-action": {
+      "tag": "v4.6.0",
+      "sha": "dbcb813823bdd20940b903addbd779551569679f",
+      "published": "2026-07-29T12:12:00Z"
+    },
+    "actions/attest-build-provenance": {
+      "tag": "v4.2.2",
+      "sha": "4d101475d8b20a2381f78447822ac1eab6504dd8",
+      "published": "2026-08-06T19:59:04Z"
+    },
+    "docker/setup-qemu-action": {
+      "tag": "v4.4.0",
+      "sha": "99012661954931238ded8c8b007157a8430204e1",
+      "published": "2026-09-15T09:42:21Z"
+    },
+    "docker/metadata-action": {
+      "tag": "v6.2.0",
+      "sha": "dc802804100637a589fabce1cb79ff13a1411302",
+      "published": "2026-07-02T08:55:18Z"
+    },
+    "aquasecurity/trivy-action": {
+      "tag": "v0.36.0",
+      "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
+      "published": "2026-04-22T09:39:33Z"
+    },
+    "github/codeql-action/upload-sarif": {
+      "tag": "codeql-bundle-v2.27.2",
+      "sha": "d208ec71e39ae46397cbf6569bef8439b9aab974",
+      "published": "2026-10-07T09:38:20Z"
+    },
+    "anchore/sbom-action": {
+      "tag": "v0.24.3",
+      "sha": "66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c",
+      "published": "2026-10-02T15:35:43Z"
+    }
+  },
+  "verification": [
+    "npm run check: lint and typecheck passed; 4 test files / 15 tests passed; production build passed",
+    "npm audit including development dependencies: 0 vulnerabilities",
+    "amd64 container built, loaded, and native SQLite 13.0.3 successfully queried",
+    "Trivy HIGH/CRITICAL vulnerabilities: 0; secrets: 0",
+    "actionlint and git diff --check passed"
+  ]
+}

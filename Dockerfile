@@ -1,6 +1,9 @@
-# syntax=docker/dockerfile:1.7
-FROM node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436 AS build
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+FROM node:24.21.0-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66 AS build
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig*.json vite.config.ts vitest.config.ts eslint.config.js ./
@@ -12,7 +15,7 @@ RUN npm run build \
     && mkdir -p /runtime-data/database /runtime-data/files /runtime-data/tmp /runtime-data/quarantine /runtime-data/logs \
     && chown -R 10001:10001 /runtime-data
 
-FROM gcr.io/distroless/nodejs22-debian12:nonroot@sha256:13593b7570658e8477de39e2f4a1dd25db2f836d68a0ba771251572d23bb4f8e AS runtime
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e AS runtime
 ARG APP_VERSION=0.1.0
 ARG BUILD_DATE=unknown
 ARG GIT_SHA=unknown
