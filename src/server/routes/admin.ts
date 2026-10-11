@@ -24,9 +24,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { limit?: string } }>("/api/activity", { preHandler: requireOwner, schema: { tags: ["Activity"], querystring: { type: "object", additionalProperties: false, properties: { limit: { type: "string", pattern: "^[0-9]+$" } } }, response: { 200: { type: "object", required: ["events"], properties: { events: { type: "array", items: { type: "object", additionalProperties: true } } } }, 401: errorSchema } } }, async (request) => ({ events: listAudit(app.database, Number(request.query.limit ?? 100)) }));
 
   app.get("/api/admin/diagnostics", { preHandler: requireOwner, schema: { tags: ["Admin"], response: { 200: { type: "object", additionalProperties: true }, 401: errorSchema } } }, async () => {
-    let storageWritable = false;
-    let databaseWritable = false;
-    let diskFreeBytes = 0;
+    let storageWritable: boolean;
+    let databaseWritable: boolean;
+    let diskFreeBytes: number;
     try { await access(app.appConfig.filesDir, constants.R_OK | constants.W_OK); storageWritable = true; } catch { storageWritable = false; }
     try { app.database.sqlite.prepare("SELECT 1").get(); databaseWritable = !app.database.sqlite.readonly; } catch { databaseWritable = false; }
     try { const stats = await statfs(app.appConfig.dataDir); diskFreeBytes = Number(stats.bavail * stats.bsize); } catch { diskFreeBytes = 0; }

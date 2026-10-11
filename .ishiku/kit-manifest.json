@@ -84,15 +84,15 @@
     },
     {
       "path": ".github/workflows/ishiku-pull-request-verify.yml",
-      "sha256": "87e0ea5002f38cc379e04e941dcdeb4a5e041f0d5eaddc906368ad40eb7c7912"
+      "sha256": "9945d9f7a2e375a2d8245fd723b960d424fff09d0fc71f95666992e148c62886"
     },
     {
       "path": ".github/workflows/ishiku-release-release.yml",
-      "sha256": "63f0e2f2fa29bb106fb2ad19f1070f454a5130118594d7b54e879dcfd411d0d9"
+      "sha256": "66aef45d94c9adc3636949721c386e3199ca9e6b0144f2e8e880d51fdc5ebbd2"
     },
     {
       "path": ".github/workflows/ishiku-upstream-update-upstream-update.yml",
-      "sha256": "a2d6630c1c13ee2e073f50b5ece4706369032db83969b10a5073580372978916"
+      "sha256": "661496c00ba6aa28c92705573fa35bf497c4e555b553ead8fdd31a016118f308"
     },
     {
       "path": ".ishiku/kit/platform.yaml",
@@ -225,5 +225,21 @@
   "allowed_overrides": [
     ".ishiku/overrides/"
   ],
-  "local_changes": []
+  "local_changes": [
+    {
+      "path": ".github/workflows/ishiku-pull-request-verify.yml",
+      "reason": "Reviewed upstream action updates on 2026-10-11",
+      "sha256": "9945d9f7a2e375a2d8245fd723b960d424fff09d0fc71f95666992e148c62886"
+    },
+    {
+      "path": ".github/workflows/ishiku-release-release.yml",
+      "reason": "Reviewed upstream action updates on 2026-10-11",
+      "sha256": "66aef45d94c9adc3636949721c386e3199ca9e6b0144f2e8e880d51fdc5ebbd2"
+    },
+    {
+      "path": ".github/workflows/ishiku-upstream-update-upstream-update.yml",
+      "reason": "Reviewed upstream action updates on 2026-10-11",
+      "sha256": "661496c00ba6aa28c92705573fa35bf497c4e555b553ead8fdd31a016118f308"
+    }
+  ]
 }
