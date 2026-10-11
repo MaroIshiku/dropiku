@@ -92,6 +92,13 @@
     "npm audit including development dependencies: 0 vulnerabilities",
     "amd64 container built, loaded, and native SQLite 13.0.3 successfully queried",
     "Trivy HIGH/CRITICAL vulnerabilities: 0; secrets: 0",
-    "actionlint and git diff --check passed"
-  ]
+    "actionlint and git diff --check passed",
+    "Independent local clone: 629 checks passed, 0 failures",
+    "Browser end-to-end: mobile setup, upload, share, themes and desktop keyboard navigation passed",
+    "Production container: read-only root filesystem, dropped capabilities, process UID 10001, TOTP setup, restart and persistence passed",
+    "Database created by SQLite 3.53.4 is readable and passes integrity_check under separate Python SQLite 3.51.2 runtime",
+    "GitHub CI, clone-local verification and Security workflow passed before publishing",
+    "SARIF all-severity reporting separated from the HIGH/CRITICAL publication gate"
+  ],
+  "rollback_image": "ghcr.io/maroishiku/dropiku@sha256:f519bec1bb832eb1bccb61b220d9a21f252530de1c32e1eee08112fd51a40faf"
 }
