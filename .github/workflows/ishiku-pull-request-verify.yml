@@ -33,7 +33,7 @@ jobs:
           node-version: 24
       - name: Verify independently cloned app
         env:
-          REQUIRE_ALL_VERIFIED: ${{ github.event_name == 'workflow_call' && inputs.require_all_verified }}
+          REQUIRE_ALL_VERIFIED: ${{ inputs.require_all_verified }}
         run: |
           if [ "$REQUIRE_ALL_VERIFIED" = "true" ]; then
             node .ishiku/kit/scripts/verify-app . --full
