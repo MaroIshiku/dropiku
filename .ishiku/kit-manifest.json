@@ -84,7 +84,7 @@
     },
     {
       "path": ".github/workflows/ishiku-pull-request-verify.yml",
-      "sha256": "9945d9f7a2e375a2d8245fd723b960d424fff09d0fc71f95666992e148c62886"
+      "sha256": "41de182fcff7f7af215079136af50069df3292822cce89bc328549194ef7d428"
     },
     {
       "path": ".github/workflows/ishiku-release-release.yml",
@@ -228,8 +228,8 @@
   "local_changes": [
     {
       "path": ".github/workflows/ishiku-pull-request-verify.yml",
-      "reason": "Reviewed upstream action updates on 2026-10-11",
-      "sha256": "9945d9f7a2e375a2d8245fd723b960d424fff09d0fc71f95666992e148c62886"
+      "reason": "Action updates and corrected strict reusable-workflow input handling on 2026-10-11",
+      "sha256": "41de182fcff7f7af215079136af50069df3292822cce89bc328549194ef7d428"
     },
     {
       "path": ".github/workflows/ishiku-release-release.yml",
