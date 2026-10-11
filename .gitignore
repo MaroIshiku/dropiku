@@ -36,3 +36,6 @@ source-assets/
 # Local sync conflict copies
 *_Marlo_Desktop.*
 .git-action-updates.json
+
+# Desktop sync copies may use a hyphen separator
+*-Marlo_Desktop.*

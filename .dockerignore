@@ -29,3 +29,6 @@ data-e2e
 data-visual-qa
 playwright-report
 *_Marlo_Desktop.*
+
+# Desktop sync copies may use a hyphen separator
+*-Marlo_Desktop.*
